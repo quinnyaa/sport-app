@@ -2,7 +2,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
@@ -275,8 +275,11 @@ async def get_activities(
 
 
 @app.get("/activitydetails")
-async def get_activity_detail(activitydetail: int, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
-    activity_id = activitydetail
+async def get_activity_detail(request: Request, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+    try:
+        activity_id = int(request.url.query)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid activity ID")
     strava_token = await _ensure_fresh_token(athlete, db)
 
     async with httpx.AsyncClient() as client:
