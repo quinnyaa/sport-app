@@ -18,6 +18,7 @@ interface Goal {
 
 interface Props {
   activities: Activity[]
+  loading?: boolean
 }
 
 function getWeekStart(): Date {
@@ -36,7 +37,7 @@ function formatPace(movingTime: number, distance: number): string {
   return `${min}:${sec.toString().padStart(2, '0')} /km`
 }
 
-export default function Goals({ activities }: Props) {
+export default function Goals({ activities, loading }: Props) {
   const now = new Date()
 
   const [goals, setGoals] = useState<Goal[]>(() => {
@@ -242,38 +243,59 @@ export default function Goals({ activities }: Props) {
           </div>
         </div>
 
-        <div className="achievements-list">
-          <div className="achievement-card">
-            <div className="achievement-row">
-              <div>
-                <div className="achievement-label">Longest Run</div>
-                <div className="achievement-value">{longestRun > 0 ? `${(longestRun / 1000).toFixed(2)} km` : '—'}</div>
+        {loading && activities.length === 0 ? (
+          <div className="achievements-list">
+            {[0, 1, 2].map((i) => (
+              <div className="achievement-card skeleton-card" key={i}>
+                <div className="achievement-row">
+                  <div>
+                    <span className="skeleton" style={{ width: 80, height: 11, display: 'block', marginBottom: 10 }} />
+                    <span className="skeleton" style={{ width: 100, height: 28, display: 'block' }} />
+                  </div>
+                  {i < 2 && (
+                    <div className="achievement-total">
+                      <span className="skeleton" style={{ width: 40, height: 11, display: 'block', marginBottom: 10 }} />
+                      <span className="skeleton" style={{ width: 80, height: 28, display: 'block' }} />
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="achievement-total">
-                <div className="achievement-label">Total</div>
-                <div className="achievement-value">{totalRunKm > 0 ? `${totalRunKm.toFixed(1)} km` : '—'}</div>
+            ))}
+          </div>
+        ) : (
+          <div className="achievements-list">
+            <div className="achievement-card">
+              <div className="achievement-row">
+                <div>
+                  <div className="achievement-label">Longest Run</div>
+                  <div className="achievement-value">{longestRun > 0 ? `${(longestRun / 1000).toFixed(2)} km` : '—'}</div>
+                </div>
+                <div className="achievement-total">
+                  <div className="achievement-label">Total</div>
+                  <div className="achievement-value">{totalRunKm > 0 ? `${totalRunKm.toFixed(1)} km` : '—'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="achievement-card">
+              <div className="achievement-row">
+                <div>
+                  <div className="achievement-label">Longest Ride</div>
+                  <div className="achievement-value">{longestRide > 0 ? `${(longestRide / 1000).toFixed(2)} km` : '—'}</div>
+                </div>
+                <div className="achievement-total">
+                  <div className="achievement-label">Total</div>
+                  <div className="achievement-value">{totalRideKm > 0 ? `${totalRideKm.toFixed(1)} km` : '—'}</div>
+                </div>
+              </div>
+            </div>
+            <div className="achievement-card">
+              <div className="achievement-label">Fastest Run Pace</div>
+              <div className="achievement-value">
+                {fastestPaceRun ? formatPace(fastestPaceRun.moving_time, fastestPaceRun.distance) : '—'}
               </div>
             </div>
           </div>
-          <div className="achievement-card">
-            <div className="achievement-row">
-              <div>
-                <div className="achievement-label">Longest Ride</div>
-                <div className="achievement-value">{longestRide > 0 ? `${(longestRide / 1000).toFixed(2)} km` : '—'}</div>
-              </div>
-              <div className="achievement-total">
-                <div className="achievement-label">Total</div>
-                <div className="achievement-value">{totalRideKm > 0 ? `${totalRideKm.toFixed(1)} km` : '—'}</div>
-              </div>
-            </div>
-          </div>
-          <div className="achievement-card">
-            <div className="achievement-label">Fastest Run Pace</div>
-            <div className="achievement-value">
-              {fastestPaceRun ? formatPace(fastestPaceRun.moving_time, fastestPaceRun.distance) : '—'}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   )

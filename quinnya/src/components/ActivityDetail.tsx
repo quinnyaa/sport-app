@@ -4,6 +4,9 @@ import 'leaflet/dist/leaflet.css'
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
+const detailCache = new Map<number, DetailActivity>()
+const inFlight = new Set<number>()
+
 interface Split {
   distance: number
   moving_time: number
@@ -141,26 +144,56 @@ function SplitChart({ splits, type }: { splits: Split[]; type: 'pace' | 'hr' }) 
 }
 
 export default function ActivityDetail({ activityId, token, onBack }: Props) {
-  const [detail, setDetail] = useState<DetailActivity | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [detail, setDetail] = useState<DetailActivity | null>(() => detailCache.get(activityId) ?? null)
+  const [loading, setLoading] = useState(() => !detailCache.has(activityId))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const controller = new AbortController()
+    if (detailCache.has(activityId) || inFlight.has(activityId)) return
+
+    inFlight.add(activityId)
     setLoading(true)
     setError(null)
-    fetch(`${API}/activities/${activityId}`, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/activities/${activityId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(data => { setDetail(data); setLoading(false) })
-      .catch(err => {
-        if (err.name === 'AbortError') return
+      .then(data => {
+        detailCache.set(activityId, data)
+        setDetail(data)
+        setLoading(false)
+      })
+      .catch(() => {
         setError('Failed to load activity details')
         setLoading(false)
       })
-    return () => controller.abort()
+      .finally(() => inFlight.delete(activityId))
   }, [activityId])
 
-  if (loading) return <p className="status-text">Loading activity...</p>
+  if (loading) return (
+    <div className="activity-detail skeleton-card">
+      <span className="skeleton" style={{ width: 140, height: 13, display: 'block', marginBottom: 20 }} />
+      <div className="detail-header">
+        <span className="skeleton" style={{ width: 48, height: 11, display: 'block', marginBottom: 8 }} />
+        <span className="skeleton" style={{ width: '55%', height: 22, display: 'block', marginBottom: 8 }} />
+        <span className="skeleton" style={{ width: 180, height: 13, display: 'block' }} />
+      </div>
+      <div className="detail-hero">
+        {[0, 1, 2].map((i) => (
+          <div className="detail-hero-stat" key={i}>
+            <span className="skeleton" style={{ width: '60%', height: 28, display: 'block', margin: '0 auto 8px' }} />
+            <span className="skeleton" style={{ width: '45%', height: 11, display: 'block', margin: '0 auto' }} />
+          </div>
+        ))}
+      </div>
+      <div className="detail-grid">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div className="detail-item" key={i}>
+            <span className="skeleton" style={{ width: '60%', height: 11, display: 'block', marginBottom: 8 }} />
+            <span className="skeleton" style={{ width: '80%', height: 16, display: 'block' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
   if (error || !detail) return <p className="error">{error}</p>
 
   const isRun = detail.type === 'Run'

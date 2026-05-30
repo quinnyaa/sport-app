@@ -11,6 +11,7 @@ interface Activity {
 interface Props {
   athleteName: string
   activities: Activity[]
+  loading: boolean
 }
 
 interface DayBar {
@@ -81,7 +82,7 @@ function BarChart({ data, color }: { data: DayBar[]; color: string }) {
   )
 }
 
-export default function Dashboard({ athleteName, activities }: Props) {
+export default function Dashboard({ athleteName, activities, loading }: Props) {
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
@@ -102,6 +103,36 @@ export default function Dashboard({ athleteName, activities }: Props) {
 
   const runDays = getLast14Days(activities, 'Run')
   const rideDays = getLast14Days(activities, 'Ride')
+
+  if (loading && activities.length === 0) {
+    return (
+      <div>
+        <div className="dashboard-heading-row">
+          <h2>Welcome{athleteName ? `, ${athleteName}` : ''}</h2>
+          <div className="dashboard-period-selectors">
+            <span className="skeleton" style={{ width: 90, height: 32, borderRadius: 6 }} />
+            <span className="skeleton" style={{ width: 72, height: 32, borderRadius: 6 }} />
+          </div>
+        </div>
+        <div className="stats-grid">
+          {[0, 1, 2, 3].map((i) => (
+            <div className="stat-card skeleton-card" key={i}>
+              <span className="skeleton" style={{ width: '55%', height: 28, display: 'block', margin: '0 auto 10px' }} />
+              <span className="skeleton" style={{ width: '70%', height: 11, display: 'block', margin: '0 auto' }} />
+            </div>
+          ))}
+        </div>
+        <div className="charts-grid">
+          {[0, 1].map((i) => (
+            <div className="chart-card skeleton-card" key={i}>
+              <span className="skeleton" style={{ width: '50%', height: 11, display: 'block', marginBottom: 14 }} />
+              <span className="skeleton" style={{ width: '100%', height: 80, display: 'block', borderRadius: 4 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
