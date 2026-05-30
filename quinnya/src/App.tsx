@@ -181,7 +181,14 @@ function App() {
   return (
     <div className="app">
       <header>
-        <div className="header-logo">
+        <div
+          className="header-logo"
+          onClick={() => {
+            setActiveTab('dashboard')
+            localStorage.setItem('active_tab', 'dashboard')
+          }}
+          style={{ cursor: 'pointer' }}
+        >
           <img src={quinnYaIcon} alt="Quinnya" className="app-icon" />
           <h1>QUINNYA</h1>
         </div>
