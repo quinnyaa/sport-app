@@ -71,13 +71,24 @@ function App() {
     loadFromCache(token)
   }, [token])
 
+  function handleUnauthorized() {
+    localStorage.removeItem('strava_token')
+    localStorage.removeItem('athlete_name')
+    setToken(null)
+    setAthleteName('')
+    setActivities([])
+    setStravaPage(1)
+    setHasMore(true)
+  }
+
   async function loadFromCache(t: string) {
     setLoading(true)
     try {
       const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${t}` } })
+      if (res.status === 401) { handleUnauthorized(); return }
       const data: Activity[] = await res.json()
 
-      if (data.length > 0) {
+      if (Array.isArray(data) && data.length > 0) {
         setActivities(data)
         // Розраховуємо яку сторінку Strava вже маємо в БД
         setStravaPage(Math.ceil(data.length / 30))
@@ -98,8 +109,10 @@ function App() {
 
     try {
       const res = await fetch(`${API}/activities?page=${page}`, { headers: { Authorization: `Bearer ${t}` } })
+      if (res.status === 401) { handleUnauthorized(); return }
       const data: Activity[] = await res.json()
 
+      if (!Array.isArray(data)) { setError('Unexpected response from server'); return }
       if (data.length < 30) setHasMore(false)
 
       setActivities((prev) => initial ? data : [...prev, ...data])
@@ -124,7 +137,9 @@ function App() {
         `${API}/activities?after=${after}&before=${before}&per_page=200`,
         { headers: { Authorization: `Bearer ${token}` } }
       )
+      if (res.status === 401) { handleUnauthorized(); return }
       const data: Activity[] = await res.json()
+      if (!Array.isArray(data)) { setError('Unexpected response from server'); return }
       setActivities((prev) => {
         const ids = new Set(prev.map((a) => a.id))
         const merged = [...prev, ...data.filter((a) => !ids.has(a.id))]
@@ -144,10 +159,12 @@ function App() {
     if (!token || syncing) return
     setSyncing(true)
     try {
-      await fetch(`${API}/activities?page=1`, { headers: { Authorization: `Bearer ${token}` } })
+      const syncRes = await fetch(`${API}/activities?page=1`, { headers: { Authorization: `Bearer ${token}` } })
+      if (syncRes.status === 401) { handleUnauthorized(); return }
       const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${token}` } })
+      if (res.status === 401) { handleUnauthorized(); return }
       const data: Activity[] = await res.json()
-      if (data.length > 0) setActivities(data)
+      if (Array.isArray(data) && data.length > 0) setActivities(data)
     } catch {
       setError('Failed to sync activities')
     } finally {
