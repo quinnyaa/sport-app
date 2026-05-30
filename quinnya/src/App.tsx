@@ -195,6 +195,9 @@ function App() {
   }
 
   function logout() {
+    if (token) {
+      fetch(`${API}/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
+    }
     localStorage.removeItem('quinnya_session')
     localStorage.removeItem('athlete_name')
     setToken(null)

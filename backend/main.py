@@ -198,6 +198,13 @@ async def _ensure_fresh_token(athlete: models.Athlete, db: Session) -> str:
     return athlete.access_token
 
 
+@app.post("/auth/logout")
+def logout(db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+    athlete.session_token = None
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/activities/cached")
 def get_cached_activities(db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
     rows = (
