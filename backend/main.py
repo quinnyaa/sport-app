@@ -146,16 +146,29 @@ def get_cached_activities(db: Session = Depends(get_db), access_token: str = Dep
 
 
 @app.get("/activities")
-async def get_activities(page: int = 1, db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
+async def get_activities(
+    page: int = 1,
+    after: int | None = None,
+    before: int | None = None,
+    per_page: int = 30,
+    db: Session = Depends(get_db),
+    access_token: str = Depends(_token_from_header),
+):
     athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
     if not athlete:
         raise HTTPException(status_code=401, detail="Unknown token")
+
+    strava_params: dict = {"per_page": min(per_page, 200), "page": page}
+    if after is not None:
+        strava_params["after"] = after
+    if before is not None:
+        strava_params["before"] = before
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
             "https://www.strava.com/api/v3/athlete/activities",
             headers={"Authorization": f"Bearer {access_token}"},
-            params={"per_page": 30, "page": page},
+            params=strava_params,
         )
 
     if response.status_code != 200:

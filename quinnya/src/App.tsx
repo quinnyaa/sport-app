@@ -39,6 +39,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [fetchingForDates, setFetchingForDates] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null)
 
@@ -113,6 +114,30 @@ function App() {
   function loadMore() {
     if (!token || !hasMore) return
     fetchFromStrava(token, stravaPage + 1, false)
+  }
+
+  async function fetchForDates(after: number, before: number) {
+    if (!token) return
+    setFetchingForDates(true)
+    try {
+      const res = await fetch(
+        `${API}/activities?after=${after}&before=${before}&per_page=200`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      const data: Activity[] = await res.json()
+      setActivities((prev) => {
+        const ids = new Set(prev.map((a) => a.id))
+        const merged = [...prev, ...data.filter((a) => !ids.has(a.id))]
+        return merged.sort(
+          (a, b) =>
+            new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime()
+        )
+      })
+    } catch {
+      setError('Failed to load activities for selected period')
+    } finally {
+      setFetchingForDates(false)
+    }
   }
 
   async function syncActivities() {
@@ -203,6 +228,8 @@ function App() {
             hasMore={hasMore}
             onLoadMore={loadMore}
             onSelectActivity={setSelectedActivityId}
+            onFetchForDates={fetchForDates}
+            fetchingForDates={fetchingForDates}
           />
         )}
         {activeTab === 'progress' && <Progress />}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
 interface Activity {
   id: number
@@ -17,7 +17,11 @@ interface Props {
   hasMore: boolean
   onLoadMore: () => void
   onSelectActivity: (id: number) => void
+  onFetchForDates?: (after: number, before: number) => void
+  fetchingForDates?: boolean
 }
+
+type TypeFilter = 'all' | 'Run' | 'Ride'
 
 const PER_PAGE = 5
 
@@ -57,13 +61,134 @@ function LoadingMoreBar() {
   )
 }
 
-export default function Activities({ activities, loading, loadingMore, error, hasMore, onLoadMore, onSelectActivity }: Props) {
+export default function Activities({
+  activities,
+  loading,
+  loadingMore,
+  error,
+  hasMore,
+  onLoadMore,
+  onSelectActivity,
+  onFetchForDates,
+  fetchingForDates,
+}: Props) {
   const [page, setPage] = useState(1)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+
+  const filtered = useMemo(() => {
+    return activities.filter((a) => {
+      const date = new Date(a.start_date_local)
+      if (dateFrom && date < new Date(dateFrom)) return false
+      if (dateTo && date > new Date(dateTo + 'T23:59:59')) return false
+      if (typeFilter !== 'all' && a.type !== typeFilter) return false
+      return true
+    })
+  }, [activities, dateFrom, dateTo, typeFilter])
+
+  const needsOlderFetch = useMemo(() => {
+    if (!dateFrom || !onFetchForDates || activities.length === 0) return false
+    const oldest = activities.reduce((o, a) =>
+      new Date(a.start_date_local) < new Date(o.start_date_local) ? a : o
+    )
+    return new Date(oldest.start_date_local) > new Date(dateFrom) && hasMore
+  }, [activities, dateFrom, hasMore, onFetchForDates])
+
+  function resetFilters() {
+    setDateFrom('')
+    setDateTo('')
+    setTypeFilter('all')
+    setPage(1)
+  }
+
+  function handleDateFromChange(val: string) {
+    setDateFrom(val)
+    setPage(1)
+  }
+
+  function handleDateToChange(val: string) {
+    setDateTo(val)
+    setPage(1)
+  }
+
+  function handleTypeChange(t: TypeFilter) {
+    setTypeFilter(t)
+    setPage(1)
+  }
+
+  function handleLoadForDates() {
+    if (!onFetchForDates || !dateFrom) return
+    const after = Math.floor(new Date(dateFrom).getTime() / 1000)
+    const before = dateTo
+      ? Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000)
+      : Math.floor(Date.now() / 1000)
+    onFetchForDates(after, before)
+  }
+
+  const hasActiveFilters = dateFrom || dateTo || typeFilter !== 'all'
+
+  const totalPages = Math.ceil(filtered.length / PER_PAGE)
+  const safePageFiltered = Math.min(page, Math.max(1, totalPages))
+  const start = (safePageFiltered - 1) * PER_PAGE
+  const visible = filtered.slice(start, start + PER_PAGE)
+
+  function handleNext() {
+    const nextPage = safePageFiltered + 1
+    if (nextPage > totalPages && hasMore && !hasActiveFilters) onLoadMore()
+    setPage(nextPage)
+  }
+
+  const isLastLoaded = safePageFiltered === totalPages || totalPages === 0
+  const canGoNext = !isLastLoaded || (isLastLoaded && hasMore && !hasActiveFilters)
+
+  const filterPanel = (
+    <div className="activities-filters">
+      <div className="filter-type-toggle">
+        {(['all', 'Run', 'Ride'] as TypeFilter[]).map((t) => (
+          <button
+            key={t}
+            className={`filter-type-btn${typeFilter === t ? ' active' : ''}`}
+            onClick={() => handleTypeChange(t)}
+          >
+            {t === 'all' ? 'All' : t}
+          </button>
+        ))}
+      </div>
+      <div className="filter-dates">
+        <input
+          type="date"
+          className="filter-date-input"
+          value={dateFrom}
+          onChange={(e) => handleDateFromChange(e.target.value)}
+          max={dateTo || undefined}
+          title="From date"
+        />
+        <span className="filter-date-sep">–</span>
+        <input
+          type="date"
+          className="filter-date-input"
+          value={dateTo}
+          onChange={(e) => handleDateToChange(e.target.value)}
+          min={dateFrom || undefined}
+          title="To date"
+        />
+      </div>
+      {hasActiveFilters && (
+        <button className="filter-reset-btn" onClick={resetFilters}>
+          Reset
+        </button>
+      )}
+    </div>
+  )
 
   if (loading) {
     return (
       <div>
-        <h2>My Activities</h2>
+        <div className="activities-heading-row">
+          <h2>My Activities</h2>
+          {filterPanel}
+        </div>
         <div className="activities-list">
           <SkeletonCard />
           <SkeletonCard />
@@ -75,23 +200,32 @@ export default function Activities({ activities, loading, loadingMore, error, ha
 
   if (error) return <p className="error">{error}</p>
 
-  const totalPages = Math.ceil(activities.length / PER_PAGE)
-  const start = (page - 1) * PER_PAGE
-  const visible = activities.slice(start, start + PER_PAGE)
-
-  function handleNext() {
-    const nextPage = page + 1
-    if (nextPage > totalPages && hasMore) onLoadMore()
-    setPage(nextPage)
-  }
-
-  const isLastLoaded = page === totalPages
-  const canGoNext = !isLastLoaded || (isLastLoaded && hasMore)
-
   return (
     <div>
-      <h2>My Activities</h2>
+      <div className="activities-heading-row">
+        <h2>My Activities</h2>
+        {filterPanel}
+      </div>
+
+      {needsOlderFetch && (
+        <div className="filter-fetch-banner">
+          <span>No activities found before {new Date(activities[activities.length - 1]?.start_date_local).toLocaleDateString('en-GB')} — older data may not be loaded yet.</span>
+          <button
+            className="filter-fetch-btn"
+            onClick={handleLoadForDates}
+            disabled={fetchingForDates}
+          >
+            {fetchingForDates ? 'Loading…' : 'Load for this period'}
+          </button>
+        </div>
+      )}
+
       <div className="activities-list">
+        {visible.length === 0 && !loadingMore && (
+          <p className="status-text" style={{ textAlign: 'center' }}>
+            No activities match the selected filters.
+          </p>
+        )}
         {visible.map((a) => (
           <div key={a.id} className="activity-card">
             <div className="activity-header">
@@ -100,7 +234,13 @@ export default function Activities({ activities, loading, loadingMore, error, ha
                 {new Date(a.start_date_local).toLocaleDateString('en-GB')}
               </span>
             </div>
-            <div className="activity-name">{a.name}</div>
+            <div
+              className="activity-name"
+              onClick={() => onSelectActivity(a.id)}
+              style={{ cursor: 'pointer' }}
+            >
+              {a.name}
+            </div>
             <div className="activity-card-footer">
               <div className="activity-stats">
                 <span>{formatDistance(a.distance)}</span>
@@ -116,23 +256,25 @@ export default function Activities({ activities, loading, loadingMore, error, ha
 
       {loadingMore && <LoadingMoreBar />}
 
-      <div className="pagination">
-        <button
-          className="page-btn"
-          onClick={() => setPage((p) => p - 1)}
-          disabled={page === 1}
-        >
-          ← Prev
-        </button>
-        <span className="page-info">Page {page}</span>
-        <button
-          className="page-btn"
-          onClick={handleNext}
-          disabled={!canGoNext || loadingMore}
-        >
-          Next →
-        </button>
-      </div>
+      {filtered.length > 0 && (
+        <div className="pagination">
+          <button
+            className="page-btn"
+            onClick={() => setPage((p) => p - 1)}
+            disabled={safePageFiltered === 1}
+          >
+            ← Prev
+          </button>
+          <span className="page-info">Page {safePageFiltered}</span>
+          <button
+            className="page-btn"
+            onClick={handleNext}
+            disabled={!canGoNext || loadingMore}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
