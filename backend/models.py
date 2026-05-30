@@ -11,6 +11,8 @@ class Athlete(Base):
     lastname = Column(String)
     access_token = Column(String)
     refresh_token = Column(String)
+    token_expires_at = Column(Integer, default=0)  # Unix timestamp from Strava
+    session_token = Column(String, unique=True)    # Our own session identifier
 
 
 class Activity(Base):

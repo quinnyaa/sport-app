@@ -6,13 +6,14 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 import httpx
 
 _PENDING_TTL = 300        # seconds before a pending entry expires
 _MAX_PENDING = 200        # max simultaneous pending sessions
 
-# session_id → {access_token, athlete_name, expires_at}
+# session_id → {session_token, athlete_name, expires_at}
 _pending_sessions: dict[str, dict] = {}
 # state → expires_at  (one entry per in-flight OAuth login)
 _pending_states: dict[str, float] = {}
@@ -31,6 +32,23 @@ import models
 load_dotenv()
 
 Base.metadata.create_all(bind=engine)
+
+
+def _migrate_db() -> None:
+    """Add columns introduced after initial schema without dropping existing data."""
+    with engine.connect() as conn:
+        for stmt in [
+            "ALTER TABLE athletes ADD COLUMN token_expires_at INTEGER DEFAULT 0",
+            "ALTER TABLE athletes ADD COLUMN session_token TEXT",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+
+_migrate_db()
 
 STRAVA_CLIENT_ID = os.getenv("STRAVA_CLIENT_ID")
 STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
@@ -102,9 +120,12 @@ async def strava_callback(code: str, state: str, db: Session = Depends(get_db)):
 
     # Зберігаємо або оновлюємо атлета в БД
     athlete = db.query(models.Athlete).filter_by(strava_id=strava_athlete["id"]).first()
+    new_session_token = str(uuid.uuid4())
     if athlete:
         athlete.access_token = tokens["access_token"]
         athlete.refresh_token = tokens["refresh_token"]
+        athlete.token_expires_at = tokens.get("expires_at", 0)
+        athlete.session_token = new_session_token
     else:
         athlete = models.Athlete(
             strava_id=strava_athlete["id"],
@@ -112,6 +133,8 @@ async def strava_callback(code: str, state: str, db: Session = Depends(get_db)):
             lastname=strava_athlete.get("lastname", ""),
             access_token=tokens["access_token"],
             refresh_token=tokens["refresh_token"],
+            token_expires_at=tokens.get("expires_at", 0),
+            session_token=new_session_token,
         )
         db.add(athlete)
 
@@ -123,7 +146,7 @@ async def strava_callback(code: str, state: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="Too many pending sessions")
     session_id = str(uuid.uuid4())
     _pending_sessions[session_id] = {
-        "access_token": tokens["access_token"],
+        "session_token": new_session_token,
         "athlete_name": athlete_name,
         "expires_at": time.time() + _PENDING_TTL,
     }
@@ -135,21 +158,48 @@ def exchange_session(session_id: str):
     session = _pending_sessions.pop(session_id, None)
     if not session or time.time() > session["expires_at"]:
         raise HTTPException(status_code=404, detail="Invalid or expired session")
-    return {"access_token": session["access_token"], "athlete_name": session["athlete_name"]}
+    return {"session_token": session["session_token"], "athlete_name": session["athlete_name"]}
 
 
-def _token_from_header(authorization: str = Header()) -> str:
+def _get_athlete(authorization: str = Header(), db: Session = Depends(get_db)) -> models.Athlete:
     if not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Invalid authorization header")
-    return authorization.removeprefix("Bearer ")
+    session_token = authorization.removeprefix("Bearer ")
+    athlete = db.query(models.Athlete).filter_by(session_token=session_token).first()
+    if not athlete:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    return athlete
+
+
+async def _ensure_fresh_token(athlete: models.Athlete, db: Session) -> str:
+    """Return a valid Strava access_token, refreshing if it expires within 60 s."""
+    if athlete.token_expires_at and time.time() < athlete.token_expires_at - 60:
+        return athlete.access_token
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            "https://www.strava.com/oauth/token",
+            data={
+                "client_id": STRAVA_CLIENT_ID,
+                "client_secret": STRAVA_CLIENT_SECRET,
+                "grant_type": "refresh_token",
+                "refresh_token": athlete.refresh_token,
+            },
+        )
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=401, detail="Strava token refresh failed — please log in again")
+
+    data = resp.json()
+    athlete.access_token = data["access_token"]
+    athlete.refresh_token = data["refresh_token"]
+    athlete.token_expires_at = data["expires_at"]
+    db.commit()
+    return athlete.access_token
 
 
 @app.get("/activities/cached")
-def get_cached_activities(db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
-    athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
-    if not athlete:
-        raise HTTPException(status_code=401, detail="Unknown token")
-
+def get_cached_activities(db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
     rows = (
         db.query(models.Activity)
         .filter_by(athlete_id=athlete.id)
@@ -177,11 +227,9 @@ async def get_activities(
     before: int | None = None,
     per_page: int = 30,
     db: Session = Depends(get_db),
-    access_token: str = Depends(_token_from_header),
+    athlete: models.Athlete = Depends(_get_athlete),
 ):
-    athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
-    if not athlete:
-        raise HTTPException(status_code=401, detail="Unknown token")
+    strava_token = await _ensure_fresh_token(athlete, db)
 
     strava_params: dict = {"per_page": min(per_page, 200), "page": page}
     if after is not None:
@@ -192,7 +240,7 @@ async def get_activities(
     async with httpx.AsyncClient() as client:
         response = await client.get(
             "https://www.strava.com/api/v3/athlete/activities",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {strava_token}"},
             params=strava_params,
         )
 
@@ -220,15 +268,13 @@ async def get_activities(
 
 
 @app.get("/activities/{activity_id}")
-async def get_activity_detail(activity_id: int, db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
-    athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
-    if not athlete:
-        raise HTTPException(status_code=401, detail="Unknown token")
+async def get_activity_detail(activity_id: int, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+    strava_token = await _ensure_fresh_token(athlete, db)
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"https://www.strava.com/api/v3/activities/{activity_id}",
-            headers={"Authorization": f"Bearer {access_token}"},
+            headers={"Authorization": f"Bearer {strava_token}"},
         )
 
     if response.status_code != 200:

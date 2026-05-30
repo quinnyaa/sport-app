@@ -72,8 +72,8 @@ function App() {
       fetch(`${API}/auth/token?session_id=${sessionId}`)
         .then((r) => r.json())
         .then((data) => {
-          localStorage.setItem('strava_token', data.access_token)
-          setToken(data.access_token)
+          localStorage.setItem('quinnya_session', data.session_token)
+          setToken(data.session_token)
           if (data.athlete_name) {
             localStorage.setItem('athlete_name', data.athlete_name)
             setAthleteName(data.athlete_name)
@@ -82,7 +82,7 @@ function App() {
         .catch(() => setError('Auth failed, please try again'))
         .finally(() => setAuthChecked(true))
     } else {
-      const saved = localStorage.getItem('strava_token')
+      const saved = localStorage.getItem('quinnya_session')
       if (saved) setToken(saved)
       setAuthChecked(true)
     }
@@ -94,7 +94,7 @@ function App() {
   }, [token])
 
   function handleUnauthorized() {
-    localStorage.removeItem('strava_token')
+    localStorage.removeItem('quinnya_session')
     localStorage.removeItem('athlete_name')
     setToken(null)
     setAthleteName('')
@@ -195,7 +195,7 @@ function App() {
   }
 
   function logout() {
-    localStorage.removeItem('strava_token')
+    localStorage.removeItem('quinnya_session')
     localStorage.removeItem('athlete_name')
     setToken(null)
     setAthleteName('')
