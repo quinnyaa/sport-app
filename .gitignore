@@ -40,3 +40,4 @@ pnpm-debug.log*
 
 # Claude
 .claude/settings.local.json
+claude.md
