@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header
@@ -8,8 +9,21 @@ from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 import httpx
 
-# Short-lived in-memory store: session_id → {access_token, athlete_name}
+_PENDING_TTL = 300        # seconds before a pending entry expires
+_MAX_PENDING = 200        # max simultaneous pending sessions
+
+# session_id → {access_token, athlete_name, expires_at}
 _pending_sessions: dict[str, dict] = {}
+# state → expires_at  (one entry per in-flight OAuth login)
+_pending_states: dict[str, float] = {}
+
+
+def _cleanup_pending() -> None:
+    now = time.time()
+    for k in [k for k, v in _pending_sessions.items() if v["expires_at"] < now]:
+        del _pending_sessions[k]
+    for k in [k for k, v in _pending_states.items() if v < now]:
+        del _pending_states[k]
 
 from database import engine, get_db, Base
 import models
@@ -50,18 +64,25 @@ def health():
 
 @app.get("/auth/strava")
 def strava_login():
+    _cleanup_pending()
+    state = str(uuid.uuid4())
+    _pending_states[state] = time.time() + _PENDING_TTL
     url = (
         f"https://www.strava.com/oauth/authorize"
         f"?client_id={STRAVA_CLIENT_ID}"
         f"&redirect_uri={STRAVA_REDIRECT_URI}"
         f"&response_type=code"
         f"&scope=read,activity:read_all"
+        f"&state={state}"
     )
     return RedirectResponse(url)
 
 
 @app.get("/auth/callback")
-async def strava_callback(code: str, db: Session = Depends(get_db)):
+async def strava_callback(code: str, state: str, db: Session = Depends(get_db)):
+    expiry = _pending_states.pop(state, None)
+    if expiry is None or time.time() > expiry:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "https://www.strava.com/oauth/token",
@@ -97,10 +118,14 @@ async def strava_callback(code: str, db: Session = Depends(get_db)):
     db.commit()
 
     athlete_name = strava_athlete.get("firstname", "")
+    _cleanup_pending()
+    if len(_pending_sessions) >= _MAX_PENDING:
+        raise HTTPException(status_code=503, detail="Too many pending sessions")
     session_id = str(uuid.uuid4())
     _pending_sessions[session_id] = {
         "access_token": tokens["access_token"],
         "athlete_name": athlete_name,
+        "expires_at": time.time() + _PENDING_TTL,
     }
     return RedirectResponse(f"{FRONTEND_URL}?session_id={session_id}")
 
@@ -108,9 +133,9 @@ async def strava_callback(code: str, db: Session = Depends(get_db)):
 @app.get("/auth/token")
 def exchange_session(session_id: str):
     session = _pending_sessions.pop(session_id, None)
-    if not session:
+    if not session or time.time() > session["expires_at"]:
         raise HTTPException(status_code=404, detail="Invalid or expired session")
-    return session
+    return {"access_token": session["access_token"], "athlete_name": session["athlete_name"]}
 
 
 def _token_from_header(authorization: str = Header()) -> str:
