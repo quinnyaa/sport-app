@@ -154,7 +154,7 @@ export default function ActivityDetail({ activityId, token, onBack }: Props) {
     inFlight.add(activityId)
     setLoading(true)
     setError(null)
-    fetch(`${API}/activities/${activityId}`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API}/activitydetails/${activityId}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
         detailCache.set(activityId, data)
