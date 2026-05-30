@@ -235,7 +235,7 @@ function App() {
         >
           <img src={quinnYaIcon} alt="Quinnya" className="app-icon" />
           <h1>QUINNYA</h1>
-          <span style={{ fontSize: '0.65rem', color: '#9ca3af', alignSelf: 'center', marginLeft: '0.35rem' }}>v1.1.0</span>
+          <span style={{ fontSize: '0.65rem', color: '#9ca3af', alignSelf: 'center', marginLeft: '0.35rem' }}>v{__APP_VERSION__}</span>
         </div>
         <div className="header-actions">
           <button onClick={syncActivities} className="sync-btn" disabled={syncing}>
