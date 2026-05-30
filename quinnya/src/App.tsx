@@ -31,9 +31,11 @@ function App() {
   const [authChecked, setAuthChecked] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [athleteName, setAthleteName] = useState<string>(() => localStorage.getItem('athlete_name') ?? '')
-  const [activeTab, setActiveTab] = useState<Tab>(
-    () => (localStorage.getItem('active_tab') as Tab) ?? 'dashboard'
-  )
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('activitydetails')) return 'activities'
+    return (localStorage.getItem('active_tab') as Tab) ?? 'dashboard'
+  })
   const [activities, setActivities] = useState<Activity[]>([])
   const [stravaPage, setStravaPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
@@ -43,14 +45,22 @@ function App() {
   const [fetchingForDates, setFetchingForDates] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedActivityId, setSelectedActivityId] = useState<number | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = params.get('activitydetails')
+    if (fromUrl) return Number(fromUrl)
     const saved = sessionStorage.getItem('selected_activity_id')
     return saved ? Number(saved) : null
   })
 
   function selectActivity(id: number | null) {
     setSelectedActivityId(id)
-    if (id === null) sessionStorage.removeItem('selected_activity_id')
-    else sessionStorage.setItem('selected_activity_id', String(id))
+    if (id === null) {
+      sessionStorage.removeItem('selected_activity_id')
+      window.history.pushState({}, '', '/')
+    } else {
+      sessionStorage.setItem('selected_activity_id', String(id))
+      window.history.pushState({}, '', `?activitydetails=${id}`)
+    }
   }
 
   useEffect(() => {
