@@ -18,6 +18,18 @@ interface DayBar {
   km: number
 }
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+function buildYearOptions(): number[] {
+  const currentYear = new Date().getFullYear()
+  const years: number[] = []
+  for (let y = currentYear; y >= 2010; y--) years.push(y)
+  return years
+}
+
 function getLast14Days(activities: Activity[], type: 'Run' | 'Ride'): DayBar[] {
   return Array.from({ length: 14 }, (_, i) => {
     const day = new Date()
@@ -71,28 +83,58 @@ function BarChart({ data, color }: { data: DayBar[]; color: string }) {
 
 export default function Dashboard({ athleteName, activities }: Props) {
   const now = new Date()
-  const thisMonth = activities.filter((a) => {
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear())
+
+  const filtered = activities.filter((a) => {
     const d = new Date(a.start_date_local)
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear
   })
 
-  const runs = thisMonth.filter((a) => a.type === 'Run')
-  const rides = thisMonth.filter((a) => a.type === 'Ride')
+  const runs = filtered.filter((a) => a.type === 'Run')
+  const rides = filtered.filter((a) => a.type === 'Ride')
   const runDistance = runs.reduce((sum, a) => sum + a.distance, 0)
   const rideDistance = rides.reduce((sum, a) => sum + a.distance, 0)
-  const totalTime = thisMonth.reduce((sum, a) => sum + a.moving_time, 0)
+  const totalTime = filtered.reduce((sum, a) => sum + a.moving_time, 0)
 
-  const monthName = now.toLocaleString('en-GB', { month: 'long' })
+  const monthName = MONTHS[selectedMonth]
+  const yearOptions = buildYearOptions()
 
   const runDays = getLast14Days(activities, 'Run')
   const rideDays = getLast14Days(activities, 'Ride')
 
   return (
     <div>
-      <h2>Welcome{athleteName ? `, ${athleteName}` : ''}</h2>
+      <div className="dashboard-heading-row">
+        <h2>Welcome{athleteName ? `, ${athleteName}` : ''}</h2>
+        <div className="dashboard-period-selectors">
+          <div className="select-wrapper">
+            <select
+              className="dashboard-period-select"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            >
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="select-wrapper">
+            <select
+              className="dashboard-period-select"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-value">{thisMonth.length}</div>
+          <div className="stat-value">{filtered.length}</div>
           <div className="stat-label">{monthName} Activities</div>
         </div>
         <div className="stat-card">

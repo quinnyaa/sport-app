@@ -162,6 +162,42 @@ h2 {
   color: #ccc;
 }
 
+.dashboard-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.dashboard-heading-row h2 {
+  margin-bottom: 0;
+}
+
+.dashboard-period-selectors {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dashboard-period-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #ccc;
+  padding: 6px 30px 6px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.dashboard-period-select:focus {
+  outline: none;
+  border-color: #444;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
