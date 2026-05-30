@@ -149,7 +149,7 @@ export default function ActivityDetail({ activityId, token, onBack }: Props) {
     const controller = new AbortController()
     setLoading(true)
     setError(null)
-    fetch(`${API}/activities/${activityId}?access_token=${token}`, { signal: controller.signal })
+    fetch(`${API}/activities/${activityId}`, { signal: controller.signal, headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => { setDetail(data); setLoading(false) })
       .catch(err => {

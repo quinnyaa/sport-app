@@ -44,17 +44,21 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get('access_token')
+    const sessionId = params.get('session_id')
 
-    if (urlToken) {
-      localStorage.setItem('strava_token', urlToken)
-      setToken(urlToken)
-      const name = params.get('athlete_name') ?? ''
-      if (name) {
-        localStorage.setItem('athlete_name', name)
-        setAthleteName(name)
-      }
+    if (sessionId) {
       window.history.replaceState({}, '', '/')
+      fetch(`${API}/auth/token?session_id=${sessionId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          localStorage.setItem('strava_token', data.access_token)
+          setToken(data.access_token)
+          if (data.athlete_name) {
+            localStorage.setItem('athlete_name', data.athlete_name)
+            setAthleteName(data.athlete_name)
+          }
+        })
+        .catch(() => setError('Auth failed, please try again'))
     } else {
       const saved = localStorage.getItem('strava_token')
       if (saved) setToken(saved)
@@ -69,7 +73,7 @@ function App() {
   async function loadFromCache(t: string) {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/activities/cached?access_token=${t}`)
+      const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${t}` } })
       const data: Activity[] = await res.json()
 
       if (data.length > 0) {
@@ -92,7 +96,7 @@ function App() {
     initial ? setLoading(true) : setLoadingMore(true)
 
     try {
-      const res = await fetch(`${API}/activities?access_token=${t}&page=${page}`)
+      const res = await fetch(`${API}/activities?page=${page}`, { headers: { Authorization: `Bearer ${t}` } })
       const data: Activity[] = await res.json()
 
       if (data.length < 30) setHasMore(false)
@@ -115,8 +119,8 @@ function App() {
     if (!token || syncing) return
     setSyncing(true)
     try {
-      await fetch(`${API}/activities?access_token=${token}&page=1`)
-      const res = await fetch(`${API}/activities/cached?access_token=${token}`)
+      await fetch(`${API}/activities?page=1`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${token}` } })
       const data: Activity[] = await res.json()
       if (data.length > 0) setActivities(data)
     } catch {

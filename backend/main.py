@@ -1,11 +1,15 @@
 import os
+import uuid
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 import httpx
+
+# Short-lived in-memory store: session_id → {access_token, athlete_name}
+_pending_sessions: dict[str, dict] = {}
 
 from database import engine, get_db, Base
 import models
@@ -93,16 +97,30 @@ async def strava_callback(code: str, db: Session = Depends(get_db)):
     db.commit()
 
     athlete_name = strava_athlete.get("firstname", "")
-    frontend_url = (
-        f"{FRONTEND_URL}"
-        f"?access_token={tokens['access_token']}"
-        f"&athlete_name={athlete_name}"
-    )
-    return RedirectResponse(frontend_url)
+    session_id = str(uuid.uuid4())
+    _pending_sessions[session_id] = {
+        "access_token": tokens["access_token"],
+        "athlete_name": athlete_name,
+    }
+    return RedirectResponse(f"{FRONTEND_URL}?session_id={session_id}")
+
+
+@app.get("/auth/token")
+def exchange_session(session_id: str):
+    session = _pending_sessions.pop(session_id, None)
+    if not session:
+        raise HTTPException(status_code=404, detail="Invalid or expired session")
+    return session
+
+
+def _token_from_header(authorization: str = Header()) -> str:
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    return authorization.removeprefix("Bearer ")
 
 
 @app.get("/activities/cached")
-def get_cached_activities(access_token: str, db: Session = Depends(get_db)):
+def get_cached_activities(db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
     athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
     if not athlete:
         raise HTTPException(status_code=401, detail="Unknown token")
@@ -128,7 +146,7 @@ def get_cached_activities(access_token: str, db: Session = Depends(get_db)):
 
 
 @app.get("/activities")
-async def get_activities(access_token: str, page: int = 1, db: Session = Depends(get_db)):
+async def get_activities(page: int = 1, db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
     athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
     if not athlete:
         raise HTTPException(status_code=401, detail="Unknown token")
@@ -164,7 +182,7 @@ async def get_activities(access_token: str, page: int = 1, db: Session = Depends
 
 
 @app.get("/activities/{activity_id}")
-async def get_activity_detail(activity_id: int, access_token: str, db: Session = Depends(get_db)):
+async def get_activity_detail(activity_id: int, db: Session = Depends(get_db), access_token: str = Depends(_token_from_header)):
     athlete = db.query(models.Athlete).filter_by(access_token=access_token).first()
     if not athlete:
         raise HTTPException(status_code=401, detail="Unknown token")
