@@ -19,11 +19,15 @@ STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET")
 STRAVA_REDIRECT_URI = os.getenv("STRAVA_REDIRECT_URI")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
+# Support multiple origins: FRONTEND_URL + always allow localhost for local dev
+_origins = {FRONTEND_URL, "http://localhost:5173", "http://localhost:5174"}
+ALLOWED_ORIGINS = list(_origins)
+
 app = FastAPI(title="Quinnya API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
