@@ -241,7 +241,7 @@ function App() {
           <button onClick={syncActivities} className="sync-btn" disabled={syncing}>
             {syncing ? 'Syncing…' : '↻ Sync'}
           </button>
-          <button onClick={logout} className="logout-btn">Exit</button>
+          <button onClick={logout} className="logout-btn">Log out</button>
         </div>
       </header>
 
