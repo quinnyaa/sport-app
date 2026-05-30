@@ -63,6 +63,18 @@ function App() {
     }
   }
 
+  // Перемикання вкладки: скидаємо відкриту активність і чистимо URL,
+  // щоб ?activitydetails= не «зависало» в адресі при переході в інший розділ.
+  function changeTab(tab: Tab) {
+    setActiveTab(tab)
+    localStorage.setItem('active_tab', tab)
+    if (selectedActivityId !== null) {
+      setSelectedActivityId(null)
+      sessionStorage.removeItem('selected_activity_id')
+      window.history.pushState({}, '', '/')
+    }
+  }
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const sessionId = params.get('session_id')
@@ -227,10 +239,7 @@ function App() {
       <header>
         <div
           className="header-logo"
-          onClick={() => {
-            setActiveTab('dashboard')
-            localStorage.setItem('active_tab', 'dashboard')
-          }}
+          onClick={() => changeTab('dashboard')}
           style={{ cursor: 'pointer' }}
         >
           <img src={quinnYaIcon} alt="Quinnya" className="app-icon" />
@@ -250,10 +259,7 @@ function App() {
           <button
             key={tab.id}
             className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab(tab.id)
-              localStorage.setItem('active_tab', tab.id)
-            }}
+            onClick={() => changeTab(tab.id)}
           >
             {tab.label}
           </button>
