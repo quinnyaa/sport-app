@@ -241,30 +241,30 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
       <button className="back-btn" onClick={onBack}>← Back to activities</button>
 
       <div className="detail-header">
-        <span className="activity-type">{detail.type}</span>
-        <h2 className="detail-title">{detail.name}</h2>
-        <div className="detail-date-row">
+        <div className="detail-header-main">
+          <span className="activity-type">{detail.type}</span>
+          <h2 className="detail-title">{detail.name}</h2>
           <div className="detail-date">
             {new Date(detail.start_date_local).toLocaleString('en-GB', {
               weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
               hour: '2-digit', minute: '2-digit',
             })}
           </div>
-          <button className="gpx-download-btn gpx-download-btn--full" disabled={downloading} onClick={handleGpxDownload}>
-            {downloading ? (
-              <svg className="gpx-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            )}
-            {downloading ? 'Downloading...' : 'Download GPX'}
-          </button>
         </div>
+        <button className="gpx-download-btn gpx-download-btn--full" disabled={downloading} onClick={handleGpxDownload}>
+          {downloading ? (
+            <svg className="gpx-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          )}
+          {downloading ? 'Downloading...' : 'Download GPX'}
+        </button>
       </div>
 
       <div className="detail-hero">
@@ -291,7 +291,16 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
         </div>
       </div>
 
-      <div className="detail-grid">
+      <div className={`detail-overview${polyline ? '' : ' detail-overview--single'}`}>
+        {polyline && (
+          <div className="detail-section detail-map-section">
+            <div className="detail-section-title">Route</div>
+            <RouteMap polyline={polyline} />
+          </div>
+        )}
+        <div className="detail-section detail-stats-section">
+          <div className="detail-section-title">Stats</div>
+          <div className="detail-grid">
         <div className="detail-item">
           <div className="detail-item-label">Elevation</div>
           <div className="detail-item-value">{detail.total_elevation_gain.toFixed(0)} m</div>
@@ -374,14 +383,16 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
             <div className="detail-item-value">{detail.gear.name}</div>
           </div>
         )}
+          </div>
+        </div>
       </div>
 
-      {polyline && (
+      {detail.description ? (
         <div className="detail-section">
-          <div className="detail-section-title">Route</div>
-          <RouteMap polyline={polyline} />
+          <div className="detail-section-title">Description</div>
+          <div className="detail-description-text">{detail.description}</div>
         </div>
-      )}
+      ) : null}
 
       {isRun && detail.splits_metric && detail.splits_metric.length > 0 && (
         <div className="detail-charts">
@@ -398,13 +409,7 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
         </div>
       )}
 
-      {detail.description ? (
-        <div className="detail-section">
-          <div className="detail-section-title">Description</div>
-          <div className="detail-description-text">{detail.description}</div>
-        </div>
-      ) : null}
-
+      <div className="detail-bottom">
       {isRun && detail.splits_metric && detail.splits_metric.length > 0 && (
         <div className="detail-section">
           <div className="detail-section-title">Splits</div>
@@ -444,6 +449,7 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
