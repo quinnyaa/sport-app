@@ -271,39 +271,28 @@ export default function Activities({
           </p>
         )}
         {visible.map((a) => (
-          <div key={a.id} className="activity-card">
+          <div key={a.id} className="activity-card" onClick={() => onSelectActivity(a.id)}>
             <div className="activity-header">
               <span className="activity-type">{a.type}</span>
               <span className="activity-date">
                 {new Date(a.start_date_local).toLocaleDateString('en-GB')}
               </span>
             </div>
-            <div
-              className="activity-name"
-              onClick={() => onSelectActivity(a.id)}
-              style={{ cursor: 'pointer' }}
-            >
-              {a.name}
-            </div>
-            <div className="activity-card-footer">
-              <div className="activity-stats">
-                <span>{formatDistance(a.distance)}</span>
-                <span>{formatTime(a.moving_time)}</span>
-                <button
-                  className="gpx-download-btn"
-                  title="Download GPX"
-                  onClick={(e) => { e.stopPropagation(); downloadGpx(a.id, token) }}
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  <span>.gpx</span>
-                </button>
-              </div>
-              <button className="details-btn" onClick={() => onSelectActivity(a.id)}>
-                Check details →
+            <div className="activity-name">{a.name}</div>
+            <div className="activity-stats">
+              <span>{formatDistance(a.distance)}</span>
+              <span>{formatTime(a.moving_time)}</span>
+              <button
+                className="gpx-download-btn"
+                title="Download GPX"
+                onClick={(e) => { e.stopPropagation(); downloadGpx(a.id, token) }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>.gpx</span>
               </button>
             </div>
           </div>

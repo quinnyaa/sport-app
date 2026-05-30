@@ -221,7 +221,7 @@ h2 {
 
 .stat-label {
   font-size: 0.8rem;
-  color: #666;
+  color: #888;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -371,10 +371,11 @@ h2 {
   border-radius: 10px;
   padding: 16px;
   transition: border-color 0.2s;
+  cursor: pointer;
 }
 
 .activity-card:hover {
-  border-color: #3a3a3a;
+  border-color: #fc4c02;
 }
 
 .activity-header {
@@ -393,14 +394,13 @@ h2 {
 
 .activity-date {
   font-size: 0.8rem;
-  color: #555;
+  color: #888;
 }
 
 .activity-name {
   font-size: 0.95rem;
   font-weight: 500;
   margin-bottom: 10px;
-  width: fit-content;
 }
 
 .activity-stats {
@@ -577,26 +577,6 @@ h2 {
   margin: 16px 0;
 }
 
-/* Activity card footer */
-.activity-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.details-btn {
-  background: transparent;
-  border: none;
-  color: #555;
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 0;
-  transition: color 0.2s;
-}
-
-.details-btn:hover {
-  color: #fc4c02;
-}
 
 /* Activity Detail */
 .activity-detail {
@@ -807,7 +787,7 @@ h2 {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #555;
+  color: #888;
   margin-bottom: 12px;
 }
 
@@ -863,7 +843,7 @@ h2 {
 
 .bar-label {
   font-size: 0.62rem;
-  color: #444;
+  color: #777;
   margin-top: 5px;
   line-height: 1;
 }
