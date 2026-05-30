@@ -2,7 +2,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
@@ -229,7 +229,7 @@ def get_cached_activities(db: Session = Depends(get_db), athlete: models.Athlete
 
 @app.get("/activities")
 async def get_activities(
-    page: int = 1,
+    page: int = Query(1, ge=1, le=100),
     after: int | None = None,
     before: int | None = None,
     per_page: int = 30,

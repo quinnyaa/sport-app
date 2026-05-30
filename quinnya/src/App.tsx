@@ -269,6 +269,7 @@ function App() {
             activityId={selectedActivityId}
             token={token!}
             onBack={() => selectActivity(null)}
+            onUnauthorized={handleUnauthorized}
           />
         )}
         {activeTab === 'activities' && selectedActivityId === null && (

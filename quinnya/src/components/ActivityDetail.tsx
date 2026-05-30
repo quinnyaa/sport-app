@@ -52,6 +52,7 @@ interface Props {
   activityId: number
   token: string
   onBack: () => void
+  onUnauthorized: () => void
 }
 
 function formatTime(s: number): string {
@@ -143,7 +144,7 @@ function SplitChart({ splits, type }: { splits: Split[]; type: 'pace' | 'hr' }) 
   )
 }
 
-export default function ActivityDetail({ activityId, token, onBack }: Props) {
+export default function ActivityDetail({ activityId, token, onBack, onUnauthorized }: Props) {
   const [detail, setDetail] = useState<DetailActivity | null>(() => detailCache.get(activityId) ?? null)
   const [loading, setLoading] = useState(() => !detailCache.has(activityId))
   const [error, setError] = useState<string | null>(null)
@@ -155,8 +156,12 @@ export default function ActivityDetail({ activityId, token, onBack }: Props) {
     setLoading(true)
     setError(null)
     fetch(`${API}/activitydetails?id=${activityId}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+      .then(r => {
+        if (r.status === 401) { onUnauthorized(); return null }
+        return r.json()
+      })
       .then(data => {
+        if (!data) return
         detailCache.set(activityId, data)
         setDetail(data)
         setLoading(false)
