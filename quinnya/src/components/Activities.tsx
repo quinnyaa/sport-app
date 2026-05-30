@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react'
 
+const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 interface Activity {
   id: number
   name: string
@@ -15,6 +17,7 @@ interface Props {
   loadingMore: boolean
   error: string | null
   hasMore: boolean
+  token: string
   onLoadMore: () => void
   onSelectActivity: (id: number) => void
   onFetchForDates?: (after: number, before: number) => void
@@ -61,12 +64,29 @@ function LoadingMoreBar() {
   )
 }
 
+async function downloadGpx(activityId: number, token: string) {
+  const res = await fetch(`${API}/activities/${activityId}/gpx`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const cd = res.headers.get('content-disposition')
+  const match = cd?.match(/filename="(.+)"/)
+  a.download = match ? match[1] : `activity_${activityId}.gpx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function Activities({
   activities,
   loading,
   loadingMore,
   error,
   hasMore,
+  token,
   onLoadMore,
   onSelectActivity,
   onFetchForDates,
@@ -269,6 +289,18 @@ export default function Activities({
               <div className="activity-stats">
                 <span>{formatDistance(a.distance)}</span>
                 <span>{formatTime(a.moving_time)}</span>
+                <button
+                  className="gpx-download-btn"
+                  title="Download GPX"
+                  onClick={(e) => { e.stopPropagation(); downloadGpx(a.id, token) }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  <span>.gpx</span>
+                </button>
               </div>
               <button className="details-btn" onClick={() => onSelectActivity(a.id)}>
                 Check details →

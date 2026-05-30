@@ -144,6 +144,22 @@ function SplitChart({ splits, type }: { splits: Split[]; type: 'pace' | 'hr' }) 
   )
 }
 
+async function downloadGpx(activityId: number, token: string) {
+  const res = await fetch(`${API}/activities/${activityId}/gpx`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) return
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const cd = res.headers.get('content-disposition')
+  const match = cd?.match(/filename="(.+)"/)
+  a.download = match ? match[1] : `activity_${activityId}.gpx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function ActivityDetail({ activityId, token, onBack, onUnauthorized }: Props) {
   const [detail, setDetail] = useState<DetailActivity | null>(() => detailCache.get(activityId) ?? null)
   const [loading, setLoading] = useState(() => !detailCache.has(activityId))
@@ -212,11 +228,21 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
       <div className="detail-header">
         <span className="activity-type">{detail.type}</span>
         <h2 className="detail-title">{detail.name}</h2>
-        <div className="detail-date">
-          {new Date(detail.start_date_local).toLocaleString('en-GB', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-            hour: '2-digit', minute: '2-digit',
-          })}
+        <div className="detail-date-row">
+          <div className="detail-date">
+            {new Date(detail.start_date_local).toLocaleString('en-GB', {
+              weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            })}
+          </div>
+          <button className="gpx-download-btn gpx-download-btn--full" onClick={() => downloadGpx(activityId, token)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download GPX
+          </button>
         </div>
       </div>
 

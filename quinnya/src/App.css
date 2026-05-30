@@ -405,9 +405,36 @@ h2 {
 
 .activity-stats {
   display: flex;
+  align-items: center;
   gap: 20px;
   font-size: 0.85rem;
   color: #888;
+}
+
+.gpx-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 5px;
+  color: #666;
+  font-size: 0.75rem;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.gpx-download-btn:hover {
+  color: #fc4c02;
+  border-color: #fc4c02;
+}
+
+.gpx-download-btn--full {
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border-color: #2a2a2a;
 }
 
 /* Empty pages */
@@ -600,6 +627,13 @@ h2 {
   font-weight: 700;
   color: #f0f0f0;
   margin: 6px 0 4px;
+}
+
+.detail-date-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .detail-date {

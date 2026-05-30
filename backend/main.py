@@ -1,10 +1,11 @@
+import asyncio
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -289,3 +290,67 @@ async def get_activity_detail(id: int, db: Session = Depends(get_db), athlete: m
         raise HTTPException(status_code=400, detail="Failed to fetch activity details")
 
     return response.json()
+
+
+@app.get("/activities/{activity_id}/gpx")
+async def download_gpx(activity_id: int, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+    strava_token = await _ensure_fresh_token(athlete, db)
+
+    async with httpx.AsyncClient() as client:
+        detail_resp, streams_resp = await asyncio.gather(
+            client.get(
+                f"https://www.strava.com/api/v3/activities/{activity_id}",
+                headers={"Authorization": f"Bearer {strava_token}"},
+            ),
+            client.get(
+                f"https://www.strava.com/api/v3/activities/{activity_id}/streams",
+                headers={"Authorization": f"Bearer {strava_token}"},
+                params={"keys": "latlng,time,altitude", "key_by_type": "true"},
+            ),
+        )
+
+    if detail_resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="Failed to fetch activity details")
+
+    detail = detail_resp.json()
+    streams = streams_resp.json() if streams_resp.status_code == 200 else {}
+
+    name = detail.get("name", f"Activity {activity_id}")
+    start_time_str = detail.get("start_date", "")
+
+    latlng_data = streams.get("latlng", {}).get("data", [])
+    time_data = streams.get("time", {}).get("data", [])
+    altitude_data = streams.get("altitude", {}).get("data", [])
+
+    if not latlng_data:
+        raise HTTPException(status_code=404, detail="No GPS data available for this activity")
+
+    try:
+        start_dt = datetime.fromisoformat(start_time_str.replace("Z", "+00:00"))
+    except Exception:
+        start_dt = datetime.now(timezone.utc)
+
+    gpx_lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<gpx version="1.1" creator="Quinnya" xmlns="http://www.topografix.com/GPX/1/1">',
+        f'  <trk><name>{name}</name><trkseg>',
+    ]
+
+    for i, (lat, lng) in enumerate(latlng_data):
+        ele = altitude_data[i] if i < len(altitude_data) else None
+        t_offset = time_data[i] if i < len(time_data) else i
+        pt_time = start_dt + timedelta(seconds=t_offset)
+        ele_tag = f"<ele>{ele:.1f}</ele>" if ele is not None else ""
+        time_tag = f"<time>{pt_time.strftime('%Y-%m-%dT%H:%M:%SZ')}</time>"
+        gpx_lines.append(f'    <trkpt lat="{lat:.7f}" lon="{lng:.7f}">{ele_tag}{time_tag}</trkpt>')
+
+    gpx_lines.extend(['  </trkseg></trk>', '</gpx>'])
+
+    safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in name).strip()
+    filename = f"{safe_name}.gpx"
+
+    return Response(
+        content="\n".join(gpx_lines),
+        media_type="application/gpx+xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

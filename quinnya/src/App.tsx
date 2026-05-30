@@ -279,6 +279,7 @@ function App() {
             loadingMore={loadingMore}
             error={error}
             hasMore={hasMore}
+            token={token!}
             onLoadMore={loadMore}
             onSelectActivity={selectActivity}
             onFetchForDates={fetchForDates}
