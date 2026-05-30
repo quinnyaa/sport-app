@@ -28,6 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 function App() {
+  const [authChecked, setAuthChecked] = useState(false)
   const [token, setToken] = useState<string | null>(null)
   const [athleteName, setAthleteName] = useState<string>(() => localStorage.getItem('athlete_name') ?? '')
   const [activeTab, setActiveTab] = useState<Tab>(
@@ -41,7 +42,16 @@ function App() {
   const [syncing, setSyncing] = useState(false)
   const [fetchingForDates, setFetchingForDates] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(null)
+  const [selectedActivityId, setSelectedActivityId] = useState<number | null>(() => {
+    const saved = sessionStorage.getItem('selected_activity_id')
+    return saved ? Number(saved) : null
+  })
+
+  function selectActivity(id: number | null) {
+    setSelectedActivityId(id)
+    if (id === null) sessionStorage.removeItem('selected_activity_id')
+    else sessionStorage.setItem('selected_activity_id', String(id))
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -60,9 +70,11 @@ function App() {
           }
         })
         .catch(() => setError('Auth failed, please try again'))
+        .finally(() => setAuthChecked(true))
     } else {
       const saved = localStorage.getItem('strava_token')
       if (saved) setToken(saved)
+      setAuthChecked(true)
     }
   }, [])
 
@@ -182,6 +194,8 @@ function App() {
     setHasMore(true)
   }
 
+  if (!authChecked) return null
+
   if (!token) {
     return (
       <div className="auth-screen">
@@ -234,13 +248,13 @@ function App() {
 
       <main>
         {activeTab === 'dashboard' && (
-          <Dashboard athleteName={athleteName} activities={activities} />
+          <Dashboard athleteName={athleteName} activities={activities} loading={loading} />
         )}
         {activeTab === 'activities' && selectedActivityId !== null && (
           <ActivityDetail
             activityId={selectedActivityId}
             token={token!}
-            onBack={() => setSelectedActivityId(null)}
+            onBack={() => selectActivity(null)}
           />
         )}
         {activeTab === 'activities' && selectedActivityId === null && (
@@ -251,13 +265,13 @@ function App() {
             error={error}
             hasMore={hasMore}
             onLoadMore={loadMore}
-            onSelectActivity={setSelectedActivityId}
+            onSelectActivity={selectActivity}
             onFetchForDates={fetchForDates}
             fetchingForDates={fetchingForDates}
           />
         )}
         {activeTab === 'progress' && <Progress />}
-        {activeTab === 'goals' && <Goals activities={activities} />}
+        {activeTab === 'goals' && <Goals activities={activities} loading={loading} />}
       </main>
     </div>
   )
