@@ -274,8 +274,9 @@ async def get_activities(
     return strava_activities
 
 
-@app.get("/activitydetails/{activity_id}")
-async def get_activity_detail(activity_id: int, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+@app.get("/activitydetails")
+async def get_activity_detail(activitydetail: int, db: Session = Depends(get_db), athlete: models.Athlete = Depends(_get_athlete)):
+    activity_id = activitydetail
     strava_token = await _ensure_fresh_token(athlete, db)
 
     async with httpx.AsyncClient() as client:
