@@ -55,14 +55,13 @@ export default function Goals({ activities }: Props) {
   const [selMonth, setSelMonth] = useState(now.getMonth())
   const [selYear, setSelYear] = useState(now.getFullYear())
 
-  const monthOptions = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    return {
-      month: d.getMonth(),
-      year: d.getFullYear(),
-      label: d.toLocaleString('en-GB', { month: 'long', year: 'numeric' }),
-    }
-  })
+  const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ]
+
+  const yearOptions: number[] = []
+  for (let y = now.getFullYear(); y >= 2010; y--) yearOptions.push(y)
 
   useEffect(() => {
     localStorage.setItem('quinnya_goals', JSON.stringify(goals))
@@ -221,16 +220,23 @@ export default function Goals({ activities }: Props) {
           <h2>Achievements</h2>
           <div className="select-wrapper">
             <select
-              className="month-select"
-              value={`${selYear}-${selMonth}`}
-              onChange={e => {
-                const [y, m] = e.target.value.split('-')
-                setSelYear(+y)
-                setSelMonth(+m)
-              }}
+              className="dashboard-period-select"
+              value={selMonth}
+              onChange={e => setSelMonth(Number(e.target.value))}
             >
-              {monthOptions.map(o => (
-                <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>{o.label}</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i}>{m}</option>
+              ))}
+            </select>
+          </div>
+          <div className="select-wrapper">
+            <select
+              className="dashboard-period-select"
+              value={selYear}
+              onChange={e => setSelYear(Number(e.target.value))}
+            >
+              {yearOptions.map(y => (
+                <option key={y} value={y}>{y}</option>
               ))}
             </select>
           </div>
