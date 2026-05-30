@@ -19,7 +19,7 @@ interface Activity {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'dashboard', label: 'Main' },
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'activities', label: 'Activities' },
   { id: 'progress', label: 'Progress' },
   { id: 'goals', label: 'Goals' },

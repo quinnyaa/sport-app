@@ -281,6 +281,12 @@ h2 {
   gap: 6px;
 }
 
+.filter-date-label {
+  color: #666;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 .filter-date-input {
   background: #111;
   border: 1px solid #2a2a2a;

@@ -216,22 +216,24 @@ export default function Activities({
         ))}
       </div>
       <div className="filter-dates">
+        <label className="filter-date-label" htmlFor="filter-date-from">From</label>
         <input
+          id="filter-date-from"
           type="date"
           className="filter-date-input"
           value={dateFrom}
           onChange={(e) => handleDateFromChange(e.target.value)}
           max={dateTo || undefined}
-          title="From date"
         />
         <span className="filter-date-sep">–</span>
+        <label className="filter-date-label" htmlFor="filter-date-to">To</label>
         <input
+          id="filter-date-to"
           type="date"
           className="filter-date-input"
           value={dateTo}
           onChange={(e) => handleDateToChange(e.target.value)}
           min={dateFrom || undefined}
-          title="To date"
         />
       </div>
       {hasActiveFilters && (
