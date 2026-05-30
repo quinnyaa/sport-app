@@ -427,19 +427,26 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-top: 20px;
+  gap: 4px;
+  margin-top: 16px;
 }
 
 .page-btn {
   background: #1a1a1a;
   border: 1px solid #2a2a2a;
   color: #ccc;
-  padding: 8px 18px;
+  padding: 5px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  min-width: 34px;
+  text-align: center;
   transition: border-color 0.2s, color 0.2s;
+}
+
+.page-btn--arrow {
+  padding: 5px 10px;
+  min-width: 30px;
 }
 
 .page-btn:hover:not(:disabled) {
@@ -454,7 +461,19 @@ h2 {
 
 .page-info {
   font-size: 0.85rem;
+  color: #fff;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  padding: 5px 12px;
+  border-radius: 6px;
+  min-width: 34px;
+  text-align: center;
+}
+
+.page-ellipsis {
   color: #555;
+  font-size: 0.85rem;
+  padding: 0 2px;
 }
 
 /* Skeleton loaders */

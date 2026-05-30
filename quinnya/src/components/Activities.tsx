@@ -72,7 +72,22 @@ export default function Activities({
   onFetchForDates,
   fetchingForDates,
 }: Props) {
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(() => {
+    const p = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1', 10)
+    return isNaN(p) || p < 1 ? 1 : p
+  })
+
+  function savePage(p: number) {
+    const params = new URLSearchParams(window.location.search)
+    if (p === 1) {
+      params.delete('page')
+    } else {
+      params.set('page', String(p))
+    }
+    const qs = params.toString()
+    window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname)
+    setPage(p)
+  }
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
@@ -99,22 +114,22 @@ export default function Activities({
     setDateFrom('')
     setDateTo('')
     setTypeFilter('all')
-    setPage(1)
+    savePage(1)
   }
 
   function handleDateFromChange(val: string) {
     setDateFrom(val)
-    setPage(1)
+    savePage(1)
   }
 
   function handleDateToChange(val: string) {
     setDateTo(val)
-    setPage(1)
+    savePage(1)
   }
 
   function handleTypeChange(t: TypeFilter) {
     setTypeFilter(t)
-    setPage(1)
+    savePage(1)
   }
 
   function handleLoadForDates() {
@@ -133,14 +148,23 @@ export default function Activities({
   const start = (safePageFiltered - 1) * PER_PAGE
   const visible = filtered.slice(start, start + PER_PAGE)
 
-  function handleNext() {
-    const nextPage = safePageFiltered + 1
-    if (nextPage > totalPages && hasMore && !hasActiveFilters) onLoadMore()
-    setPage(nextPage)
+  function goToPage(targetPage: number) {
+    if (targetPage > totalPages && hasMore && !hasActiveFilters) onLoadMore()
+    savePage(targetPage)
   }
 
-  const isLastLoaded = safePageFiltered === totalPages || totalPages === 0
-  const canGoNext = !isLastLoaded || (isLastLoaded && hasMore && !hasActiveFilters)
+  const canLoadMore = hasMore && !hasActiveFilters
+
+  const prevPageButton = safePageFiltered > 1 ? safePageFiltered - 1 : null
+
+  const nextPageButtons: number[] = []
+  for (let i = 1; i <= 2; i++) {
+    const p = safePageFiltered + i
+    const exists = p <= totalPages
+    const loadable = canLoadMore && p <= totalPages + 1
+    if (exists || loadable) nextPageButtons.push(p)
+  }
+  const showLast = totalPages > safePageFiltered + 2
 
   const filterPanel = (
     <div className="activities-filters">
@@ -259,19 +283,42 @@ export default function Activities({
       {filtered.length > 0 && (
         <div className="pagination">
           <button
-            className="page-btn"
-            onClick={() => setPage((p) => p - 1)}
+            className="page-btn page-btn--arrow"
+            onClick={() => savePage(safePageFiltered - 1)}
             disabled={safePageFiltered === 1}
           >
-            ← Prev
+            ←
           </button>
-          <span className="page-info">Page {safePageFiltered}</span>
+          {prevPageButton && (
+            <button className="page-btn" onClick={() => savePage(prevPageButton)}>
+              {prevPageButton}
+            </button>
+          )}
+          <span className="page-info">{safePageFiltered}</span>
+          {nextPageButtons.map((p) => (
+            <button
+              key={p}
+              className="page-btn"
+              onClick={() => goToPage(p)}
+              disabled={loadingMore}
+            >
+              {p}
+            </button>
+          ))}
+          {showLast && (
+            <>
+              {totalPages > safePageFiltered + 3 && <span className="page-ellipsis">…</span>}
+              <button className="page-btn" onClick={() => savePage(totalPages)}>
+                {totalPages}
+              </button>
+            </>
+          )}
           <button
-            className="page-btn"
-            onClick={handleNext}
-            disabled={!canGoNext || loadingMore}
+            className="page-btn page-btn--arrow"
+            onClick={() => goToPage(safePageFiltered + 1)}
+            disabled={!(safePageFiltered < totalPages || canLoadMore) || loadingMore}
           >
-            Next →
+            →
           </button>
         </div>
       )}
