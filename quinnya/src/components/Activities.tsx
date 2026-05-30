@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { showToast } from '../toast'
 
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
@@ -68,7 +69,7 @@ async function downloadGpx(activityId: number, token: string) {
   const res = await fetch(`${API}/activities/${activityId}/gpx`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) return
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -96,6 +97,21 @@ export default function Activities({
     const p = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1', 10)
     return isNaN(p) || p < 1 ? 1 : p
   })
+  const [downloading, setDownloading] = useState<Set<number>>(new Set())
+
+  async function handleGpxDownload(e: React.MouseEvent, id: number) {
+    e.stopPropagation()
+    if (downloading.has(id)) return
+    setDownloading(prev => new Set(prev).add(id))
+    try {
+      await downloadGpx(id, token)
+      showToast('GPX downloaded', 'success')
+    } catch {
+      showToast('Download failed', 'error')
+    } finally {
+      setDownloading(prev => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
 
   function savePage(p: number) {
     const params = new URLSearchParams(window.location.search)
@@ -285,14 +301,23 @@ export default function Activities({
               <button
                 className="gpx-download-btn"
                 title="Download GPX"
-                onClick={(e) => { e.stopPropagation(); downloadGpx(a.id, token) }}
+                disabled={downloading.has(a.id)}
+                onClick={(e) => handleGpxDownload(e, a.id)}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                  <polyline points="7 10 12 15 17 10"/>
-                  <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                <span>.gpx</span>
+                {downloading.has(a.id) ? (
+                  <svg className="gpx-spin" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  </svg>
+                ) : (
+                  <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    <span>.gpx</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
