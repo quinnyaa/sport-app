@@ -8,6 +8,7 @@ import Progress from './components/Progress'
 import Goals from './components/Goals'
 
 type Tab = 'dashboard' | 'activities' | 'progress' | 'goals'
+type Theme = 'light' | 'dark'
 
 interface Activity {
   id: number
@@ -29,6 +30,10 @@ const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false)
+  // Світла тема — за замовчуванням; вибір зберігається в localStorage
+  const [theme, setTheme] = useState<Theme>(() =>
+    localStorage.getItem('quinnya_theme') === 'dark' ? 'dark' : 'light'
+  )
   const [token, setToken] = useState<string | null>(null)
   const [athleteName, setAthleteName] = useState<string>(() => localStorage.getItem('athlete_name') ?? '')
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -73,6 +78,15 @@ function App() {
       sessionStorage.removeItem('selected_activity_id')
       window.history.pushState({}, '', '/')
     }
+  }
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('quinnya_theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme((t) => (t === 'light' ? 'dark' : 'light'))
   }
 
   useEffect(() => {
@@ -244,9 +258,26 @@ function App() {
         >
           <img src={quinnYaIcon} alt="Quinnya" className="app-icon" />
           <h1>QUINNYA</h1>
-          <span style={{ fontSize: '0.65rem', color: '#9ca3af', alignSelf: 'center', marginLeft: '0.35rem' }}>v{__APP_VERSION__}</span>
+          <span className="app-version">v{__APP_VERSION__}</span>
         </div>
         <div className="header-actions">
+          <button
+            onClick={toggleTheme}
+            className="theme-toggle-btn"
+            title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+            aria-label={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          >
+            {theme === 'light' ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            )}
+          </button>
           <button onClick={syncActivities} className="sync-btn" disabled={syncing}>
             {syncing ? 'Syncing…' : '↻ Sync'}
           </button>
@@ -292,7 +323,7 @@ function App() {
             fetchingForDates={fetchingForDates}
           />
         )}
-        {activeTab === 'progress' && <Progress />}
+        {activeTab === 'progress' && <Progress activities={activities} loading={loading} />}
         {activeTab === 'goals' && <Goals activities={activities} loading={loading} />}
       </main>
     </div>

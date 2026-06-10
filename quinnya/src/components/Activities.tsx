@@ -284,9 +284,17 @@ export default function Activities({
 
       <div className="activities-list">
         {visible.length === 0 && !loadingMore && (
-          <p className="status-text" style={{ textAlign: 'center' }}>
-            No activities match the selected filters.
-          </p>
+          <div className="empty-state">
+            <div className="empty-state-icon">🔍</div>
+            <div className="empty-state-title">
+              {hasActiveFilters ? 'No activities match the selected filters' : 'No activities yet'}
+            </div>
+            <div className="empty-state-hint">
+              {hasActiveFilters
+                ? 'Try a wider date range or reset the filters.'
+                : 'Press Sync to pull your latest activities from Strava.'}
+            </div>
+          </div>
         )}
         {visible.map((a) => (
           <div key={a.id} className="activity-card" onClick={() => onSelectActivity(a.id)}>
