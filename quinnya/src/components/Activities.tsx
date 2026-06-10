@@ -1,16 +1,9 @@
 import { useState, useMemo } from 'react'
 import { showToast } from '../toast'
-
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
-
-interface Activity {
-  id: number
-  name: string
-  type: string
-  distance: number
-  moving_time: number
-  start_date_local: string
-}
+import { downloadGpx } from '../lib/api'
+import type { Activity } from '../lib/types'
+import { formatDistance, formatDuration } from '../lib/format'
+import { oldestDate, endOfDay } from '../lib/dates'
 
 interface Props {
   activities: Activity[]
@@ -23,21 +16,12 @@ interface Props {
   onSelectActivity: (id: number) => void
   onFetchForDates?: (after: number, before: number) => void
   fetchingForDates?: boolean
+  isRangeLoaded?: (start: Date, end: Date) => boolean
 }
 
 type TypeFilter = 'all' | 'Run' | 'Ride'
 
 const PER_PAGE = 5
-
-function formatDistance(meters: number): string {
-  return (meters / 1000).toFixed(2) + ' km'
-}
-
-function formatTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}min` : `${m} min`
-}
 
 function SkeletonCard() {
   return (
@@ -65,22 +49,6 @@ function LoadingMoreBar() {
   )
 }
 
-async function downloadGpx(activityId: number, token: string) {
-  const res = await fetch(`${API}/activities/${activityId}/gpx`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  const cd = res.headers.get('content-disposition')
-  const match = cd?.match(/filename="(.+)"/)
-  a.download = match ? match[1] : `activity_${activityId}.gpx`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export default function Activities({
   activities,
   loading,
@@ -92,6 +60,7 @@ export default function Activities({
   onSelectActivity,
   onFetchForDates,
   fetchingForDates,
+  isRangeLoaded,
 }: Props) {
   const [page, setPage] = useState(() => {
     const p = parseInt(new URLSearchParams(window.location.search).get('page') ?? '1', 10)
@@ -138,13 +107,23 @@ export default function Activities({
     })
   }, [activities, dateFrom, dateTo, typeFilter])
 
+  // Права межа вибраного періоду: dateTo або кінець сьогоднішнього дня —
+  // стабільне значення, щоб збігалося з тим, що передаємо у fetchForDates.
+  const periodEnd = useMemo(
+    () => (dateTo ? new Date(dateTo + 'T23:59:59') : endOfDay(new Date())),
+    [dateTo]
+  )
+
+  const oldest = useMemo(() => oldestDate(activities), [activities])
+
   const needsOlderFetch = useMemo(() => {
-    if (!dateFrom || !onFetchForDates || activities.length === 0) return false
-    const oldest = activities.reduce((o, a) =>
-      new Date(a.start_date_local) < new Date(o.start_date_local) ? a : o
-    )
-    return new Date(oldest.start_date_local) > new Date(dateFrom) && hasMore
-  }, [activities, dateFrom, hasMore, onFetchForDates])
+    if (!dateFrom || !onFetchForDates || !oldest) return false
+    if (!hasMore) return false
+    if (oldest <= new Date(dateFrom)) return false
+    // Якщо цей період уже довантажували — старіших даних просто немає
+    if (isRangeLoaded?.(new Date(dateFrom), periodEnd)) return false
+    return true
+  }, [oldest, dateFrom, hasMore, onFetchForDates, isRangeLoaded, periodEnd])
 
   function resetFilters() {
     setDateFrom('')
@@ -171,9 +150,7 @@ export default function Activities({
   function handleLoadForDates() {
     if (!onFetchForDates || !dateFrom) return
     const after = Math.floor(new Date(dateFrom).getTime() / 1000)
-    const before = dateTo
-      ? Math.floor(new Date(dateTo + 'T23:59:59').getTime() / 1000)
-      : Math.floor(Date.now() / 1000)
+    const before = Math.floor(periodEnd.getTime() / 1000)
     onFetchForDates(after, before)
   }
 
@@ -260,7 +237,24 @@ export default function Activities({
     )
   }
 
-  if (error) return <p className="error">{error}</p>
+  // Сюди потрапляємо лише коли початкове завантаження впало і списку немає:
+  // разові збої (sync, load more) показуються тостами і список не чіпають.
+  if (error) {
+    return (
+      <div>
+        <div className="activities-heading-row">
+          <h2>My Activities</h2>
+        </div>
+        <div className="empty-state">
+          <div className="empty-state-icon">⚠️</div>
+          <div className="empty-state-title">{error}</div>
+          <div className="empty-state-hint">
+            Check that the backend is running, then press Sync to try again.
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -271,7 +265,7 @@ export default function Activities({
 
       {needsOlderFetch && (
         <div className="filter-fetch-banner">
-          <span>No activities found before {new Date(activities[activities.length - 1]?.start_date_local).toLocaleDateString('en-GB')} — older data may not be loaded yet.</span>
+          <span>No activities found before {oldest?.toLocaleDateString('en-GB')} — older data may not be loaded yet.</span>
           <button
             className="filter-fetch-btn"
             onClick={handleLoadForDates}
@@ -307,7 +301,7 @@ export default function Activities({
             <div className="activity-name">{a.name}</div>
             <div className="activity-stats">
               <span>{formatDistance(a.distance)}</span>
-              <span>{formatTime(a.moving_time)}</span>
+              <span>{formatDuration(a.moving_time)}</span>
               <button
                 className="gpx-download-btn"
                 title="Download GPX"

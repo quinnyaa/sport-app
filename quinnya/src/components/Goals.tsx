@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react'
-
-interface Activity {
-  id: number
-  type: string
-  distance: number
-  moving_time: number
-  start_date_local: string
-}
+import IncompleteDataNotice from './IncompleteDataNotice'
+import type { Activity } from '../lib/types'
+import { MONTH_NAMES, weekStart, buildYearOptions, oldestDate } from '../lib/dates'
+import { pace } from '../lib/format'
 
 interface Goal {
   id: string
@@ -19,25 +15,20 @@ interface Goal {
 interface Props {
   activities: Activity[]
   loading?: boolean
+  hasMore: boolean
+  fetchingForDates: boolean
+  onFetchForDates: (after: number, before: number) => void
+  isRangeLoaded: (start: Date, end: Date) => boolean
 }
 
-function getWeekStart(): Date {
-  const now = new Date()
-  const diff = (now.getDay() + 6) % 7
-  const monday = new Date(now)
-  monday.setDate(now.getDate() - diff)
-  monday.setHours(0, 0, 0, 0)
-  return monday
-}
-
-function formatPace(movingTime: number, distance: number): string {
-  const secPerKm = (movingTime / distance) * 1000
-  const min = Math.floor(secPerKm / 60)
-  const sec = Math.round(secPerKm % 60)
-  return `${min}:${sec.toString().padStart(2, '0')} /km`
-}
-
-export default function Goals({ activities, loading }: Props) {
+export default function Goals({
+  activities,
+  loading,
+  hasMore,
+  fetchingForDates,
+  onFetchForDates,
+  isRangeLoaded,
+}: Props) {
   const now = new Date()
 
   const [goals, setGoals] = useState<Goal[]>(() => {
@@ -56,13 +47,7 @@ export default function Goals({ activities, loading }: Props) {
   const [selMonth, setSelMonth] = useState(now.getMonth())
   const [selYear, setSelYear] = useState(now.getFullYear())
 
-  const MONTHS = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ]
-
-  const yearOptions: number[] = []
-  for (let y = now.getFullYear(); y >= 2010; y--) yearOptions.push(y)
+  const yearOptions = buildYearOptions()
 
   useEffect(() => {
     localStorage.setItem('quinnya_goals', JSON.stringify(goals))
@@ -110,12 +95,12 @@ export default function Goals({ activities, loading }: Props) {
   }
 
   function getActualKm(goal: Goal): number {
-    const weekStart = getWeekStart()
+    const monday = weekStart(new Date())
     return activities
       .filter(a => {
         if (a.type !== goal.type) return false
         const d = new Date(a.start_date_local)
-        if (goal.period === 'week') return d >= weekStart
+        if (goal.period === 'week') return d >= monday
         return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
       })
       .reduce((sum, a) => sum + a.distance / 1000, 0)
@@ -138,6 +123,13 @@ export default function Goals({ activities, loading }: Props) {
       if (!best) return a
       return a.moving_time / a.distance < best.moving_time / best.distance ? a : best
     }, null)
+
+  // Чи можуть досягнення за вибраний місяць бути неповними (див. Dashboard)
+  const periodStart = new Date(selYear, selMonth, 1)
+  const periodEnd = new Date(selYear, selMonth + 1, 0, 23, 59, 59)
+  const oldest = oldestDate(activities)
+  const dataMayBeIncomplete =
+    hasMore && oldest !== null && oldest > periodStart && !isRangeLoaded(periodStart, periodEnd)
 
   return (
     <div className="goals-layout">
@@ -225,7 +217,7 @@ export default function Goals({ activities, loading }: Props) {
               value={selMonth}
               onChange={e => setSelMonth(Number(e.target.value))}
             >
-              {MONTHS.map((m, i) => (
+              {MONTH_NAMES.map((m, i) => (
                 <option key={m} value={i}>{m}</option>
               ))}
             </select>
@@ -242,6 +234,20 @@ export default function Goals({ activities, loading }: Props) {
             </select>
           </div>
         </div>
+
+        {dataMayBeIncomplete && oldest && (
+          <IncompleteDataNotice
+            periodLabel={`${MONTH_NAMES[selMonth]} ${selYear}`}
+            oldestLoaded={oldest}
+            loading={fetchingForDates}
+            onLoad={() =>
+              onFetchForDates(
+                Math.floor(periodStart.getTime() / 1000),
+                Math.floor(periodEnd.getTime() / 1000)
+              )
+            }
+          />
+        )}
 
         {loading && activities.length === 0 ? (
           <div className="achievements-list">
@@ -291,7 +297,7 @@ export default function Goals({ activities, loading }: Props) {
             <div className="achievement-card">
               <div className="achievement-label">Fastest Run Pace</div>
               <div className="achievement-value">
-                {fastestPaceRun ? formatPace(fastestPaceRun.moving_time, fastestPaceRun.distance) : '—'}
+                {fastestPaceRun ? `${pace(fastestPaceRun.distance / fastestPaceRun.moving_time)} /km` : '—'}
               </div>
             </div>
           </div>

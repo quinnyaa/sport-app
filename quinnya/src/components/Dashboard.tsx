@@ -1,37 +1,21 @@
 import { useState } from 'react'
-
-interface Activity {
-  id: number
-  type: string
-  distance: number
-  moving_time: number
-  start_date_local: string
-}
+import BarChart, { type BarDatum } from './BarChart'
+import IncompleteDataNotice from './IncompleteDataNotice'
+import type { Activity } from '../lib/types'
+import { MONTH_NAMES, buildYearOptions, oldestDate } from '../lib/dates'
+import { SPORT_COLORS } from '../lib/colors'
 
 interface Props {
   athleteName: string
   activities: Activity[]
   loading: boolean
+  hasMore: boolean
+  fetchingForDates: boolean
+  onFetchForDates: (after: number, before: number) => void
+  isRangeLoaded: (start: Date, end: Date) => boolean
 }
 
-interface DayBar {
-  label: string
-  km: number
-}
-
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
-function buildYearOptions(): number[] {
-  const currentYear = new Date().getFullYear()
-  const years: number[] = []
-  for (let y = currentYear; y >= 2010; y--) years.push(y)
-  return years
-}
-
-function getLast14Days(activities: Activity[], type: 'Run' | 'Ride'): DayBar[] {
+function getLast14Days(activities: Activity[], type: 'Run' | 'Ride'): BarDatum[] {
   return Array.from({ length: 14 }, (_, i) => {
     const day = new Date()
     day.setDate(day.getDate() - (13 - i))
@@ -39,7 +23,7 @@ function getLast14Days(activities: Activity[], type: 'Run' | 'Ride'): DayBar[] {
     const next = new Date(day)
     next.setDate(day.getDate() + 1)
 
-    const km = activities
+    const dayKm = activities
       .filter(a => a.type === type)
       .filter(a => {
         const d = new Date(a.start_date_local)
@@ -47,42 +31,19 @@ function getLast14Days(activities: Activity[], type: 'Run' | 'Ride'): DayBar[] {
       })
       .reduce((sum, a) => sum + a.distance / 1000, 0)
 
-    return { label: String(day.getDate()), km }
+    return { label: String(day.getDate()), tooltip: `${dayKm.toFixed(1)} km`, value: dayKm }
   })
 }
 
-function BarChart({ data, color }: { data: DayBar[]; color: string }) {
-  const [hovered, setHovered] = useState<number | null>(null)
-  const max = Math.max(...data.map(d => d.km), 1)
-  return (
-    <div className="bar-chart">
-      {data.map((d, i) => (
-        <div
-          key={i}
-          className="bar-col"
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(null)}
-        >
-          <div className="bar-wrapper">
-            {d.km > 0 && (
-              <div
-                className="bar"
-                style={{ height: `${(d.km / max) * 100}%`, background: color }}
-              >
-                {hovered === i && (
-                  <div className="bar-tooltip">{d.km.toFixed(1)} km</div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="bar-label">{d.label}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export default function Dashboard({ athleteName, activities, loading }: Props) {
+export default function Dashboard({
+  athleteName,
+  activities,
+  loading,
+  hasMore,
+  fetchingForDates,
+  onFetchForDates,
+  isRangeLoaded,
+}: Props) {
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
@@ -98,11 +59,20 @@ export default function Dashboard({ athleteName, activities, loading }: Props) {
   const rideDistance = rides.reduce((sum, a) => sum + a.distance, 0)
   const totalTime = filtered.reduce((sum, a) => sum + a.moving_time, 0)
 
-  const monthName = MONTHS[selectedMonth]
+  const monthName = MONTH_NAMES[selectedMonth]
   const yearOptions = buildYearOptions()
 
   const runDays = getLast14Days(activities, 'Run')
   const rideDays = getLast14Days(activities, 'Ride')
+
+  // Чи можуть цифри за вибраний місяць бути неповними: у Strava ще є
+  // незавантажені сторінки, а найстаріша завантажена активність — пізніше
+  // за початок місяця, і цей період ще не довантажували явно.
+  const periodStart = new Date(selectedYear, selectedMonth, 1)
+  const periodEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59)
+  const oldest = oldestDate(activities)
+  const dataMayBeIncomplete =
+    hasMore && oldest !== null && oldest > periodStart && !isRangeLoaded(periodStart, periodEnd)
 
   if (loading && activities.length === 0) {
     return (
@@ -145,7 +115,7 @@ export default function Dashboard({ athleteName, activities, loading }: Props) {
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(Number(e.target.value))}
             >
-              {MONTHS.map((m, i) => (
+              {MONTH_NAMES.map((m, i) => (
                 <option key={m} value={i}>{m}</option>
               ))}
             </select>
@@ -163,6 +133,21 @@ export default function Dashboard({ athleteName, activities, loading }: Props) {
           </div>
         </div>
       </div>
+
+      {dataMayBeIncomplete && oldest && (
+        <IncompleteDataNotice
+          periodLabel={`${monthName} ${selectedYear}`}
+          oldestLoaded={oldest}
+          loading={fetchingForDates}
+          onLoad={() =>
+            onFetchForDates(
+              Math.floor(periodStart.getTime() / 1000),
+              Math.floor(periodEnd.getTime() / 1000)
+            )
+          }
+        />
+      )}
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-value">{filtered.length}</div>
@@ -185,11 +170,11 @@ export default function Dashboard({ athleteName, activities, loading }: Props) {
       <div className="charts-grid">
         <div className="chart-card">
           <div className="chart-title">Run — last 14 days</div>
-          <BarChart data={runDays} color="#fc4c02" />
+          <BarChart data={runDays} color={SPORT_COLORS.Run} />
         </div>
         <div className="chart-card">
           <div className="chart-title">Ride — last 14 days</div>
-          <BarChart data={rideDays} color="#3b82f6" />
+          <BarChart data={rideDays} color={SPORT_COLORS.Ride} />
         </div>
       </div>
     </div>

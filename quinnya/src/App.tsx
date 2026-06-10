@@ -6,18 +6,12 @@ import Activities from './components/Activities'
 import ActivityDetail from './components/ActivityDetail'
 import Progress from './components/Progress'
 import Goals from './components/Goals'
+import { showToast } from './toast'
+import { API } from './lib/api'
+import type { Activity } from './lib/types'
 
 type Tab = 'dashboard' | 'activities' | 'progress' | 'goals'
 type Theme = 'light' | 'dark'
-
-interface Activity {
-  id: number
-  name: string
-  type: string
-  distance: number
-  moving_time: number
-  start_date_local: string
-}
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -25,8 +19,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'progress', label: 'Progress' },
   { id: 'goals', label: 'Goals' },
 ]
-
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 function App() {
   const [authChecked, setAuthChecked] = useState(false)
@@ -44,6 +36,9 @@ function App() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [stravaPage, setStravaPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
+  // Періоди, які вже довантажували явно через fetchForDates, —
+  // щоб вкладки знали, що для цього діапазону старіших даних уже немає.
+  const [fetchedRanges, setFetchedRanges] = useState<{ after: number; before: number }[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [syncing, setSyncing] = useState(false)
@@ -119,6 +114,12 @@ function App() {
     loadFromCache(token)
   }, [token])
 
+  function isRangeLoaded(start: Date, end: Date): boolean {
+    const a = Math.floor(start.getTime() / 1000)
+    const b = Math.floor(end.getTime() / 1000)
+    return fetchedRanges.some((r) => r.after <= a && r.before >= b)
+  }
+
   function handleUnauthorized() {
     localStorage.removeItem('quinnya_session')
     localStorage.removeItem('athlete_name')
@@ -129,8 +130,12 @@ function App() {
     setHasMore(true)
   }
 
+  // Домовленість про помилки: стан `error` — лише коли взагалі нічого не
+  // завантажилось (Activities показує його замість списку). Разові збої
+  // (load more, sync, довантаження періоду) — тостами, не чіпаючи список.
   async function loadFromCache(t: string) {
     setLoading(true)
+    setError(null)
     try {
       const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${t}` } })
       if (res.status === 401) { handleUnauthorized(); return }
@@ -153,22 +158,33 @@ function App() {
   }
 
   async function fetchFromStrava(t: string, page: number, initial: boolean) {
-    initial ? setLoading(true) : setLoadingMore(true)
+    if (initial) {
+      setLoading(true)
+      setError(null)
+    } else {
+      setLoadingMore(true)
+    }
 
     try {
       const res = await fetch(`${API}/activities?page=${page}`, { headers: { Authorization: `Bearer ${t}` } })
       if (res.status === 401) { handleUnauthorized(); return }
       const data: Activity[] = await res.json()
 
-      if (!Array.isArray(data)) { setError('Unexpected response from server'); return }
+      if (!Array.isArray(data)) {
+        if (initial) setError('Unexpected response from server')
+        else showToast('Unexpected response from server', 'error')
+        return
+      }
       if (data.length < 30) setHasMore(false)
 
       setActivities((prev) => initial ? data : [...prev, ...data])
       setStravaPage(page)
     } catch {
-      setError('Failed to load activities')
+      if (initial) setError('Failed to load activities')
+      else showToast('Failed to load more activities', 'error')
     } finally {
-      initial ? setLoading(false) : setLoadingMore(false)
+      if (initial) setLoading(false)
+      else setLoadingMore(false)
     }
   }
 
@@ -181,23 +197,31 @@ function App() {
     if (!token) return
     setFetchingForDates(true)
     try {
-      const res = await fetch(
-        `${API}/activities?after=${after}&before=${before}&per_page=200`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (res.status === 401) { handleUnauthorized(); return }
-      const data: Activity[] = await res.json()
-      if (!Array.isArray(data)) { setError('Unexpected response from server'); return }
+      // Strava віддає максимум 200 активностей за запит — гортаємо сторінки,
+      // поки період не вичерпано (стеля 10 сторінок = 2000 активностей).
+      const fetched: Activity[] = []
+      for (let page = 1; page <= 10; page++) {
+        const res = await fetch(
+          `${API}/activities?after=${after}&before=${before}&per_page=200&page=${page}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (res.status === 401) { handleUnauthorized(); return }
+        const data: Activity[] = await res.json()
+        if (!Array.isArray(data)) { showToast('Unexpected response from server', 'error'); return }
+        fetched.push(...data)
+        if (data.length < 200) break
+      }
       setActivities((prev) => {
         const ids = new Set(prev.map((a) => a.id))
-        const merged = [...prev, ...data.filter((a) => !ids.has(a.id))]
+        const merged = [...prev, ...fetched.filter((a) => !ids.has(a.id))]
         return merged.sort(
           (a, b) =>
             new Date(b.start_date_local).getTime() - new Date(a.start_date_local).getTime()
         )
       })
+      setFetchedRanges((prev) => [...prev, { after, before }])
     } catch {
-      setError('Failed to load activities for selected period')
+      showToast('Failed to load activities for selected period', 'error')
     } finally {
       setFetchingForDates(false)
     }
@@ -209,12 +233,18 @@ function App() {
     try {
       const syncRes = await fetch(`${API}/activities?page=1`, { headers: { Authorization: `Bearer ${token}` } })
       if (syncRes.status === 401) { handleUnauthorized(); return }
+      if (!syncRes.ok) { showToast('Sync failed', 'error'); return }
       const res = await fetch(`${API}/activities/cached`, { headers: { Authorization: `Bearer ${token}` } })
       if (res.status === 401) { handleUnauthorized(); return }
+      if (!res.ok) { showToast('Sync failed', 'error'); return }
       const data: Activity[] = await res.json()
-      if (Array.isArray(data) && data.length > 0) setActivities(data)
+      if (Array.isArray(data) && data.length > 0) {
+        setActivities(data)
+        setError(null) // дані є — прибираємо помилку початкового завантаження
+      }
+      showToast('Activities synced', 'success')
     } catch {
-      setError('Failed to sync activities')
+      showToast('Sync failed', 'error')
     } finally {
       setSyncing(false)
     }
@@ -299,7 +329,15 @@ function App() {
 
       <main>
         {activeTab === 'dashboard' && (
-          <Dashboard athleteName={athleteName} activities={activities} loading={loading} />
+          <Dashboard
+            athleteName={athleteName}
+            activities={activities}
+            loading={loading}
+            hasMore={hasMore}
+            fetchingForDates={fetchingForDates}
+            onFetchForDates={fetchForDates}
+            isRangeLoaded={isRangeLoaded}
+          />
         )}
         {activeTab === 'activities' && selectedActivityId !== null && (
           <ActivityDetail
@@ -321,10 +359,29 @@ function App() {
             onSelectActivity={selectActivity}
             onFetchForDates={fetchForDates}
             fetchingForDates={fetchingForDates}
+            isRangeLoaded={isRangeLoaded}
           />
         )}
-        {activeTab === 'progress' && <Progress activities={activities} loading={loading} />}
-        {activeTab === 'goals' && <Goals activities={activities} loading={loading} />}
+        {activeTab === 'progress' && (
+          <Progress
+            activities={activities}
+            loading={loading}
+            hasMore={hasMore}
+            fetchingForDates={fetchingForDates}
+            onFetchForDates={fetchForDates}
+            isRangeLoaded={isRangeLoaded}
+          />
+        )}
+        {activeTab === 'goals' && (
+          <Goals
+            activities={activities}
+            loading={loading}
+            hasMore={hasMore}
+            fetchingForDates={fetchingForDates}
+            onFetchForDates={fetchForDates}
+            isRangeLoaded={isRangeLoaded}
+          />
+        )}
       </main>
     </div>
   )

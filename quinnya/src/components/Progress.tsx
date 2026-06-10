@@ -1,85 +1,30 @@
 import { useMemo, useState } from 'react'
-
-interface Activity {
-  id: number
-  name: string
-  type: string
-  distance: number
-  moving_time: number
-  start_date_local: string
-}
+import BarChart, { type BarDatum } from './BarChart'
+import IncompleteDataNotice from './IncompleteDataNotice'
+import type { Activity } from '../lib/types'
+import { MONTH_NAMES, MONTH_LABELS, weekStart, oldestDate } from '../lib/dates'
+import { SPORT_COLORS, sportColor } from '../lib/colors'
+import { km, formatHours } from '../lib/format'
 
 interface Props {
   activities: Activity[]
   loading: boolean
+  hasMore: boolean
+  fetchingForDates: boolean
+  onFetchForDates: (after: number, before: number) => void
+  isRangeLoaded: (start: Date, end: Date) => boolean
 }
 
 type SportFilter = 'all' | 'Run' | 'Ride'
 
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
-const SPORT_COLORS: Record<string, string> = { Run: '#fc4c02', Ride: '#3b82f6' }
-
-function sportColor(sport: SportFilter): string {
-  return SPORT_COLORS[sport] ?? '#8b5cf6'
-}
-
-function km(meters: number): string {
-  const v = meters / 1000
-  return v >= 100 ? v.toFixed(0) : v.toFixed(1)
-}
-
-function formatHours(seconds: number): string {
-  const h = Math.floor(seconds / 3600)
-  const m = Math.round((seconds % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
-}
-
-// Понеділок тижня, в який потрапляє дата
-function weekStart(d: Date): Date {
-  const monday = new Date(d)
-  monday.setDate(d.getDate() - ((d.getDay() + 6) % 7))
-  monday.setHours(0, 0, 0, 0)
-  return monday
-}
-
-interface BarDatum {
-  label: string
-  tooltip: string
-  value: number
-}
-
-function BarChart({ data, color }: { data: BarDatum[]; color: string }) {
-  const [hovered, setHovered] = useState<number | null>(null)
-  const max = Math.max(...data.map((d) => d.value), 1)
-  return (
-    <div className="bar-chart">
-      {data.map((d, i) => (
-        <div
-          key={i}
-          className="bar-col"
-          onMouseEnter={() => setHovered(i)}
-          onMouseLeave={() => setHovered(null)}
-        >
-          <div className="bar-wrapper">
-            {d.value > 0 && (
-              <div className="bar" style={{ height: `${(d.value / max) * 100}%`, background: color }}>
-                {hovered === i && <div className="bar-tooltip">{d.tooltip}</div>}
-              </div>
-            )}
-          </div>
-          <div className="bar-label">{d.label}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-export default function Progress({ activities, loading }: Props) {
+export default function Progress({
+  activities,
+  loading,
+  hasMore,
+  fetchingForDates,
+  onFetchForDates,
+  isRangeLoaded,
+}: Props) {
   const now = new Date()
   const [sport, setSport] = useState<SportFilter>('all')
   const [year, setYear] = useState(now.getFullYear())
@@ -136,7 +81,7 @@ export default function Progress({ activities, loading }: Props) {
         })
         .reduce((s, a) => s + a.distance, 0)
       const label = `${start.getDate()}.${String(start.getMonth() + 1).padStart(2, '0')}`
-      return { label, tooltip: `Week of ${label}: ${km(meters)} km`, value: meters }
+      return { label, tooltip: `Week of ${label}: ${km(meters)} km`, value: meters } as BarDatum
     })
   }, [bySport])
 
@@ -179,6 +124,13 @@ export default function Progress({ activities, loading }: Props) {
 
     return { current, previous, runKm, rideKm }
   }, [activities, bySport, year])
+
+  // Чи може статистика за вибраний рік бути неповною (див. Dashboard)
+  const periodStart = new Date(year, 0, 1)
+  const periodEnd = new Date(year, 11, 31, 23, 59, 59)
+  const oldest = oldestDate(activities)
+  const dataMayBeIncomplete =
+    hasMore && oldest !== null && oldest > periodStart && !isRangeLoaded(periodStart, periodEnd)
 
   if (loading && activities.length === 0) {
     return (
@@ -254,6 +206,20 @@ export default function Progress({ activities, loading }: Props) {
           </div>
         </div>
       </div>
+
+      {dataMayBeIncomplete && oldest && (
+        <IncompleteDataNotice
+          periodLabel={String(year)}
+          oldestLoaded={oldest}
+          loading={fetchingForDates}
+          onLoad={() =>
+            onFetchForDates(
+              Math.floor(periodStart.getTime() / 1000),
+              Math.floor(periodEnd.getTime() / 1000)
+            )
+          }
+        />
+      )}
 
       <div className="stats-grid">
         <div className="stat-card">

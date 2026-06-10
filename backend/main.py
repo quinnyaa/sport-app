@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from xml.sax.saxutils import escape
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response
@@ -333,7 +334,8 @@ async def download_gpx(activity_id: int, db: Session = Depends(get_db), athlete:
     gpx_lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<gpx version="1.1" creator="Quinnya" xmlns="http://www.topografix.com/GPX/1/1">',
-        f'  <trk><name>{name}</name><trkseg>',
+        # escape: назва активності може містити & або < — без екранування XML стане невалідним
+        f'  <trk><name>{escape(name)}</name><trkseg>',
     ]
 
     for i, (lat, lng) in enumerate(latlng_data):
