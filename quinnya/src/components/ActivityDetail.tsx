@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { showToast } from '../toast'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-
-const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import BarChart, { type BarDatum } from './BarChart'
+import { API, downloadGpx } from '../lib/api'
+import { pace, formatClock } from '../lib/format'
+import { SPORT_COLORS } from '../lib/colors'
 
 const detailCache = new Map<number, DetailActivity>()
 const inFlight = new Set<number>()
@@ -56,20 +58,6 @@ interface Props {
   onUnauthorized: () => void
 }
 
-function formatTime(s: number): string {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
-function pace(speedMs: number): string {
-  if (!speedMs) return '—'
-  const s = 1000 / speedMs
-  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`
-}
-
 function decodePolyline(encoded: string): [number, number][] {
   const result: [number, number][] = []
   let i = 0, lat = 0, lng = 0
@@ -111,54 +99,16 @@ function RouteMap({ polyline }: { polyline: string }) {
   return <div ref={ref} className="activity-map" />
 }
 
+// Перетворює спліти на дані для спільного BarChart (темп або пульс по км)
 function SplitChart({ splits, type }: { splits: Split[]; type: 'pace' | 'hr' }) {
-  const [hovered, setHovered] = useState<number | null>(null)
-  const values = splits.map(s => type === 'pace' ? s.average_speed : (s.average_heartrate ?? 0))
-  const max = Math.max(...values, 1)
-
-  return (
-    <div className="bar-chart">
-      {splits.map((s, i) => {
-        const val = values[i]
-        const pct = (val / max) * 100
-        const label = type === 'pace' ? `${pace(s.average_speed)} /km` : `${Math.round(s.average_heartrate!)} bpm`
-        const color = type === 'pace' ? '#fc4c02' : '#e05'
-        return (
-          <div
-            key={i}
-            className="bar-col"
-            onMouseEnter={() => setHovered(i)}
-            onMouseLeave={() => setHovered(null)}
-          >
-            <div className="bar-wrapper">
-              {val > 0 && (
-                <div className="bar" style={{ height: `${pct}%`, background: color }}>
-                  {hovered === i && <div className="bar-tooltip">{label}</div>}
-                </div>
-              )}
-            </div>
-            <div className="bar-label">{i + 1}</div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-async function downloadGpx(activityId: number, token: string) {
-  const res = await fetch(`${API}/activities/${activityId}/gpx`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  const cd = res.headers.get('content-disposition')
-  const match = cd?.match(/filename="(.+)"/)
-  a.download = match ? match[1] : `activity_${activityId}.gpx`
-  a.click()
-  URL.revokeObjectURL(url)
+  const data: BarDatum[] = splits.map((s, i) => ({
+    label: String(i + 1),
+    tooltip: type === 'pace'
+      ? `${pace(s.average_speed)} /km`
+      : `${Math.round(s.average_heartrate ?? 0)} bpm`,
+    value: type === 'pace' ? s.average_speed : (s.average_heartrate ?? 0),
+  }))
+  return <BarChart data={data} color={type === 'pace' ? SPORT_COLORS.Run : '#e05'} />
 }
 
 export default function ActivityDetail({ activityId, token, onBack, onUnauthorized }: Props) {
@@ -273,7 +223,7 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
           <div className="detail-hero-label">km</div>
         </div>
         <div className="detail-hero-stat">
-          <div className="detail-hero-value">{formatTime(detail.moving_time)}</div>
+          <div className="detail-hero-value">{formatClock(detail.moving_time)}</div>
           <div className="detail-hero-label">moving time</div>
         </div>
         <div className="detail-hero-stat">
@@ -307,7 +257,7 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
         </div>
         <div className="detail-item">
           <div className="detail-item-label">Elapsed Time</div>
-          <div className="detail-item-value">{formatTime(detail.elapsed_time)}</div>
+          <div className="detail-item-value">{formatClock(detail.elapsed_time)}</div>
         </div>
         <div className="detail-item">
           <div className="detail-item-label">{isRun ? 'Best Pace' : 'Max Speed'}</div>
@@ -443,7 +393,7 @@ export default function ActivityDetail({ activityId, token, onBack, onUnauthoriz
             {detail.best_efforts.map((e, i) => (
               <div key={i} className="best-effort-item">
                 <span className="best-effort-name">{e.name}</span>
-                <span className="best-effort-time">{formatTime(e.elapsed_time)}</span>
+                <span className="best-effort-time">{formatClock(e.elapsed_time)}</span>
               </div>
             ))}
           </div>
